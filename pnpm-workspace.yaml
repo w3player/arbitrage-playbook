@@ -1,0 +1,5 @@
+packages:
+  - "lifi"
+
+allowBuilds:
+  esbuild: true
