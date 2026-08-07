@@ -1,4 +1,5 @@
-import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { isAbsolute, relative, resolve } from 'node:path';
 import { Command } from 'commander';
 import { normalizeQuotes } from '../../biz/normalize-quote.js';
 import { QuoteStore } from '../../biz/sqlite-store.js';
@@ -16,6 +17,17 @@ interface RangeOptions {
   from?: string;
   to?: string;
   output?: string;
+}
+
+const reportsDirectory = fileURLToPath(new URL('../../../data/reports/', import.meta.url));
+
+function reportDirectory(name: string | undefined, fallback: string): string {
+  const directory = resolve(reportsDirectory, name ?? fallback);
+  const child = relative(reportsDirectory, directory);
+  if (isAbsolute(child) || child.startsWith('..')) {
+    throw new Error('--output must be a relative name inside data/reports');
+  }
+  return directory;
 }
 
 function timestamp(value: string | undefined, name: string): number | undefined {
@@ -37,7 +49,7 @@ function rangeCommand(name: string, description: string): Command {
     .option('-c, --config <file>', 'config JSON', 'config/backtest.example.json')
     .option('--from <ISO>', 'first quote time')
     .option('--to <ISO>', 'last quote time')
-    .option('-o, --output <dir>', 'report directory');
+    .option('-o, --output <name>', 'directory name under data/reports');
 }
 
 function loadQuotes(config: AppConfig, selected: ReturnType<typeof range>): NormalizedQuote[] {
@@ -59,7 +71,7 @@ async function backtest(options: RangeOptions): Promise<void> {
   const selected = range(options);
   const quotes = loadQuotes(config, selected);
   const result = new BacktestEngine(config, quotes).run(buildOpportunityFrames(quotes, config), selected);
-  const output = resolve(options.output ?? `reports/${new Date().toISOString().replaceAll(':', '-')}`);
+  const output = reportDirectory(options.output, new Date().toISOString().replaceAll(':', '-'));
   await writeBacktestReport(result, config, output);
   process.stdout.write(
     `报价 ${quotes.length}，交易 ${result.trades.length}，相对持有 ${formatUsd(result.excessValueUsdMicros)} USD\n报告：${output}\n`,
@@ -69,7 +81,7 @@ async function backtest(options: RangeOptions): Promise<void> {
 async function stress(options: RangeOptions): Promise<void> {
   const config = await loadConfig(options.config);
   const selected = range(options);
-  const output = resolve(options.output ?? `reports/stress-${new Date().toISOString().replaceAll(':', '-')}`);
+  const output = reportDirectory(options.output, `stress-${new Date().toISOString().replaceAll(':', '-')}`);
   const runs = runStressTests(config, loadQuotes(config, selected), selected);
   await writeStressReport(runs, config, output);
   process.stdout.write(`完成 ${runs.length} 组压力测试\n报告：${output}\n`);

@@ -76,8 +76,10 @@ pnpm --filter @arbitrage-playbook/lifi backtest
 限制时间并指定输出目录：
 
 ```bash
-pnpm --filter @arbitrage-playbook/lifi backtest --from 2026-08-01T00:00:00Z --to 2026-08-07T00:00:00Z --output reports/week-1
+pnpm --filter @arbitrage-playbook/lifi backtest --from 2026-08-01T00:00:00Z --to 2026-08-07T00:00:00Z --output week-1
 ```
+
+所有报告都写入 `lifi/data/reports/`。`--output` 只接收该目录下的相对名称；上例输出到 `lifi/data/reports/week-1/`。
 
 结果目录包含：
 
@@ -98,6 +100,8 @@ pnpm --filter @arbitrage-playbook/lifi stress
 ## 5. 检查代码
 
 ```bash
+pnpm format
+pnpm format:check
 pnpm --filter @arbitrage-playbook/lifi check
 pnpm --filter @arbitrage-playbook/lifi test
 ```
