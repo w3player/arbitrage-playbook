@@ -8,9 +8,22 @@
   },
   "scripts": {
     "dev": "tsx src/index.ts",
+    "collect": "tsx src/index.ts collect",
+    "backtest": "tsx src/index.ts backtest",
+    "stress": "tsx src/index.ts stress",
+    "test": "tsx --test src/**/*.test.ts",
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@lifi/types": "^17.86.0",
+    "commander": "^15.0.0",
+    "csv-stringify": "^6.8.1",
+    "ky": "^2.0.2",
+    "p-limit": "^7.3.1",
+    "pino": "^10.3.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

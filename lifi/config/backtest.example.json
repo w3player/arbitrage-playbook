@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "sqlitePath": "../data/quotes.sqlite",
+  "lifi": {
+    "baseUrl": "https://li.quest/v1",
+    "fromAddress": "0x000000000000000000000000000000000000dEaD",
+    "apiKeyEnv": "LIFI_API_KEY",
+    "requestTimeoutMs": 20000,
+    "maxConcurrency": 4,
+    "slippage": 0.003,
+    "skipSimulation": false,
+    "sameChainIntervalMs": 60000,
+    "rebalanceIntervalMs": 600000,
+    "sameChainTimingStrategy": "minWaitTime-300-1-300",
+    "routeTimingStrategy": "minWaitTime-300-1-300"
+  },
+  "chains": [
+    {
+      "chainId": 42161,
+      "name": "Arbitrum",
+      "wethAddress": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
+      "usdcAddress": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+      "wethDecimals": 18,
+      "usdcDecimals": 6,
+      "weightBps": 5000
+    },
+    {
+      "chainId": 8453,
+      "name": "Base",
+      "wethAddress": "0x4200000000000000000000000000000000000006",
+      "usdcAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "wethDecimals": 18,
+      "usdcDecimals": 6,
+      "weightBps": 5000
+    }
+  ],
+  "tradeSizesWeth": ["0.05", "0.1", "0.25", "0.5", "1"],
+  "rebalanceSizes": {
+    "WETH": ["0.1", "0.25", "0.5", "1"],
+    "USDC": ["250", "500", "1000", "2500"]
+  },
+  "backtest": {
+    "initialCapitalUsd": "100000",
+    "initialWethPriceUsd": "3500",
+    "initialWethWeightBps": 5000,
+    "minProfitUsd": "3",
+    "minProfitBps": 8,
+    "maxTradeInventoryBps": 1000,
+    "maxQuoteAgeMs": 90000,
+    "maxQuoteSkewMs": 30000,
+    "executionDelayMs": 5000,
+    "futureQuoteToleranceMs": 70000,
+    "cooldownMs": 30000,
+    "maxConcurrentTrades": 2,
+    "emergencyMaxDelayMs": 120000,
+    "missingFutureQuoteIsFailure": true,
+    "randomSeed": 20260807,
+    "failure": {
+      "correlatedFailureBps": 10,
+      "buyFailureBps": 20,
+      "sellFailureBps": 20
+    },
+    "rebalance": {
+      "enabled": true,
+      "hardLimitBps": 3000,
+      "quoteMaxAgeMs": 900000,
+      "cooldownMs": 1800000,
+      "completedBps": 9850,
+      "refundedBps": 100,
+      "partialBps": 30,
+      "failedBps": 20,
+      "failedRecoveryBps": 5000,
+      "defaultDurationMs": 300000
+    }
+  }
+}

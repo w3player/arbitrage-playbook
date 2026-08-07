@@ -9,6 +9,28 @@ importers:
   .: {}
 
   lifi:
+    dependencies:
+      '@lifi/types':
+        specifier: ^17.86.0
+        version: 17.90.0
+      commander:
+        specifier: ^15.0.0
+        version: 15.0.0
+      csv-stringify:
+        specifier: ^6.8.1
+        version: 6.8.3
+      ky:
+        specifier: ^2.0.2
+        version: 2.0.2
+      p-limit:
+        specifier: ^7.3.1
+        version: 7.3.1
+      pino:
+        specifier: ^10.3.1
+        version: 10.3.1
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@types/node':
         specifier: ^22.20.1
@@ -178,6 +200,12 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@lifi/types@17.90.0':
+    resolution: {integrity: sha512-dnVyjcVmRzaAIHJawlzSq//n7hukT9qMYJW3FiZ8ipRvFx84jWVBHtmJB3Pgeq/JHFQui+zKIEXi2fWUHPp6tA==}
+
+  '@pinojs/redact@0.4.0':
+    resolution: {integrity: sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg==}
+
   '@types/node@22.20.1':
     resolution: {integrity: sha512-EANqOCF9QFyra+4pfxUcX9STKJpCLjMbObVzljIJomAWSnuSIEAvyzEU53GaajbXJEgdh0iEcPL+DGvpUd4k1Q==}
 
@@ -301,6 +329,17 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  atomic-sleep@1.0.0:
+    resolution: {integrity: sha512-kNOjDqAh7px0XWNI+4QbzoiR/nTkHAWNud2uvnJquD1/x5a7EQZMJT0AczqK0Qn67oY/TTQ1LbUKajZpp3I9tQ==}
+    engines: {node: '>=8.0.0'}
+
+  commander@15.0.0:
+    resolution: {integrity: sha512-z67u4ZhzCL/Tydu1lJARtEZYWbWaN7oYLHbsuzocr6y4N6WZAagG3RQ4FW61V1/0+jImpj293XfrcYnd1qxtPg==}
+    engines: {node: '>=22.12.0'}
+
+  csv-stringify@6.8.3:
+    resolution: {integrity: sha512-gIeSCvq5F4VtXV3naV3VAewLhBkiZBz+PPhTOA8H3Y8h/ELa+R1ml0GZck/4/Nzo9ep2lvOluilJ6MJlbZsKMA==}
+
   esbuild@0.28.1:
     resolution: {integrity: sha512-HrJrvZv5ayxBzPfwphOoNzkzOIIlifzk0KJrGK2c8R4+LKpMtpYLQeUdjnwjWv/LZlkH2laZk+4w78pi99D4Vw==}
     engines: {node: '>=18'}
@@ -310,6 +349,56 @@ packages:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
+
+  ky@2.0.2:
+    resolution: {integrity: sha512-/GmXpo9F9W+f8n4Ivr2iH+7h7wL7jLbLKWkMlpflcCRb6kGjBfTlASEXaZ9qUgNTn4VgS0P2pwxxzQ4EM6Ulgg==}
+    engines: {node: '>=22'}
+
+  on-exit-leak-free@2.1.2:
+    resolution: {integrity: sha512-0eJJY6hXLGf1udHwfNftBqH+g73EU4B504nZeKpz1sYRKafAghwxEJunB2O7rDZkL4PGfsMVnTXZ2EjibbqcsA==}
+    engines: {node: '>=14.0.0'}
+
+  p-limit@7.3.1:
+    resolution: {integrity: sha512-0trZaiG7Y7kN/Egy9a8j47t9osC0Tch4PaIWd9yGF6bvmlk7muExRvGNYb8sXBwEKMoNKsbNN9P8EefuQekE4Q==}
+    engines: {node: '>=20'}
+
+  pino-abstract-transport@3.0.0:
+    resolution: {integrity: sha512-wlfUczU+n7Hy/Ha5j9a/gZNy7We5+cXp8YL+X+PG8S0KXxw7n/JXA3c46Y0zQznIJ83URJiwy7Lh56WLokNuxg==}
+
+  pino-std-serializers@7.1.0:
+    resolution: {integrity: sha512-BndPH67/JxGExRgiX1dX0w1FvZck5Wa4aal9198SrRhZjH3GxKQUKIBnYJTdj2HDN3UQAS06HlfcSbQj2OHmaw==}
+
+  pino@10.3.1:
+    resolution: {integrity: sha512-r34yH/GlQpKZbU1BvFFqOjhISRo1MNx1tWYsYvmj6KIRHSPMT2+yHOEb1SG6NMvRoHRF0a07kCOox/9yakl1vg==}
+    hasBin: true
+
+  process-warning@5.1.0:
+    resolution: {integrity: sha512-jQSaVHsPgtyw60e1rQ/A+/ArPEj/S8pS/vFnyGa/gYFXrKk/6RuDkoqVDQ5NI5MmS01698ltlAk0NoDBNLujRw==}
+
+  quick-format-unescaped@4.0.4:
+    resolution: {integrity: sha512-tYC1Q1hgyRuHgloV/YXs2w15unPVh8qfu/qCTfhTYamaw7fyhumKa2yGpdSo87vY32rIclj+4fWYQXUMs9EHvg==}
+
+  real-require@0.2.0:
+    resolution: {integrity: sha512-57frrGM/OCTLqLOAh0mhVA9VBMHd+9U7Zb2THMGdBUoZVOtGbJzjxsYGDJ3A9AYYCP4hn6y1TVbaOfzWtm5GFg==}
+    engines: {node: '>= 12.13.0'}
+
+  real-require@1.0.0:
+    resolution: {integrity: sha512-P4nbQYQfePJxRSmY+v/KINxVucm4NF3p3s7pJveMTtom52FR4YGltUQLB8idDXwDDWW+eYrWDFbuzUnjoWHF7g==}
+
+  safe-stable-stringify@2.5.0:
+    resolution: {integrity: sha512-b3rppTKm9T+PsVCBEOUR46GWI7fdOs00VKZ1+9c1EWDaDMvjQc6tUwuFyIprgGgTcWoVHSKrU8H31ZHA2e0RHA==}
+    engines: {node: '>=10'}
+
+  sonic-boom@4.2.1:
+    resolution: {integrity: sha512-w6AxtubXa2wTXAUsZMMWERrsIRAdrK0Sc+FUytWvYAhBJLyuI4llrMIC1DtlNSdI99EI86KZum2MMq3EAZlF9Q==}
+
+  split2@4.2.0:
+    resolution: {integrity: sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg==}
+    engines: {node: '>= 10.x'}
+
+  thread-stream@4.2.0:
+    resolution: {integrity: sha512-e2zZ96wSChazBsbENf/Pcm/4swHt2cEKQ92rhUjkL9GCKiTDJIaTBenjE/m9DXi0QBmTMDkFDdOomUy20A1tDQ==}
+    engines: {node: '>=20'}
 
   tsx@4.23.8:
     resolution: {integrity: sha512-8W675THjbzfFmLOQzjDBIBna+WjqMGIxmSZ1mMc1+o9qoVsEuAgQu5j5ueLhau8inOkDu9OslVg0FmfBs1RIHw==}
@@ -323,6 +412,13 @@ packages:
 
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
+
+  yocto-queue@1.2.2:
+    resolution: {integrity: sha512-4LCcse/U2MHZ63HAJVE+v71o7yOdIe4cZ70Wpf8D/IyjDKYQLV5GD46B+hSTjJsvV5PztjvHoU580EftxjDZFQ==}
+    engines: {node: '>=12.20'}
+
+  zod@4.4.3:
+    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
 snapshots:
 
@@ -404,6 +500,10 @@ snapshots:
   '@esbuild/win32-x64@0.28.1':
     optional: true
 
+  '@lifi/types@17.90.0': {}
+
+  '@pinojs/redact@0.4.0': {}
+
   '@types/node@22.20.1':
     dependencies:
       undici-types: 6.21.0
@@ -468,6 +568,12 @@ snapshots:
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
 
+  atomic-sleep@1.0.0: {}
+
+  commander@15.0.0: {}
+
+  csv-stringify@6.8.3: {}
+
   esbuild@0.28.1:
     optionalDependencies:
       '@esbuild/aix-ppc64': 0.28.1
@@ -500,6 +606,54 @@ snapshots:
   fsevents@2.3.3:
     optional: true
 
+  ky@2.0.2: {}
+
+  on-exit-leak-free@2.1.2: {}
+
+  p-limit@7.3.1:
+    dependencies:
+      yocto-queue: 1.2.2
+
+  pino-abstract-transport@3.0.0:
+    dependencies:
+      split2: 4.2.0
+
+  pino-std-serializers@7.1.0: {}
+
+  pino@10.3.1:
+    dependencies:
+      '@pinojs/redact': 0.4.0
+      atomic-sleep: 1.0.0
+      on-exit-leak-free: 2.1.2
+      pino-abstract-transport: 3.0.0
+      pino-std-serializers: 7.1.0
+      process-warning: 5.1.0
+      quick-format-unescaped: 4.0.4
+      real-require: 0.2.0
+      safe-stable-stringify: 2.5.0
+      sonic-boom: 4.2.1
+      thread-stream: 4.2.0
+
+  process-warning@5.1.0: {}
+
+  quick-format-unescaped@4.0.4: {}
+
+  real-require@0.2.0: {}
+
+  real-require@1.0.0: {}
+
+  safe-stable-stringify@2.5.0: {}
+
+  sonic-boom@4.2.1:
+    dependencies:
+      atomic-sleep: 1.0.0
+
+  split2@4.2.0: {}
+
+  thread-stream@4.2.0:
+    dependencies:
+      real-require: 1.0.0
+
   tsx@4.23.8:
     dependencies:
       esbuild: 0.28.1
@@ -530,3 +684,7 @@ snapshots:
       '@typescript/typescript-win32-x64': 7.0.2
 
   undici-types@6.21.0: {}
+
+  yocto-queue@1.2.2: {}
+
+  zod@4.4.3: {}
