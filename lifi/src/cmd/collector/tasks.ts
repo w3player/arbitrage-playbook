@@ -1,11 +1,11 @@
-import type { AppConfig } from '../../config.js'
-import type { QuoteTask } from '../../types/types.js'
-import { parseUnits } from '../../utils/index.js'
+import type { AppConfig } from '../../config.js';
+import type { QuoteTask } from '../../types/types.js';
+import { parseUnits } from '../../utils/index.js';
 
 export function buildSameChainTasks(config: AppConfig): QuoteTask[] {
   return config.chains.flatMap((chain) =>
     config.tradeSizesWeth.flatMap((size) => {
-      const amount = parseUnits(size, chain.wethDecimals).toString()
+      const amount = parseUnits(size, chain.wethDecimals).toString();
       return [
         {
           stream: 'same-chain' as const,
@@ -31,16 +31,16 @@ export function buildSameChainTasks(config: AppConfig): QuoteTask[] {
           amount,
           amountDecimals: chain.wethDecimals,
         },
-      ]
+      ];
     }),
-  )
+  );
 }
 
 export function buildRebalanceTasks(config: AppConfig): QuoteTask[] {
-  const tasks: QuoteTask[] = []
+  const tasks: QuoteTask[] = [];
   for (const fromChain of config.chains) {
     for (const toChain of config.chains) {
-      if (fromChain.chainId === toChain.chainId) continue
+      if (fromChain.chainId === toChain.chainId) continue;
       for (const size of config.rebalanceSizes.WETH) {
         tasks.push({
           stream: 'rebalance',
@@ -53,7 +53,7 @@ export function buildRebalanceTasks(config: AppConfig): QuoteTask[] {
           toTokenAddress: toChain.wethAddress,
           amount: parseUnits(size, fromChain.wethDecimals).toString(),
           amountDecimals: fromChain.wethDecimals,
-        })
+        });
       }
       for (const size of config.rebalanceSizes.USDC) {
         tasks.push({
@@ -67,9 +67,9 @@ export function buildRebalanceTasks(config: AppConfig): QuoteTask[] {
           toTokenAddress: toChain.usdcAddress,
           amount: parseUnits(size, fromChain.usdcDecimals).toString(),
           amountDecimals: fromChain.usdcDecimals,
-        })
+        });
       }
     }
   }
-  return tasks
+  return tasks;
 }

@@ -1,11 +1,11 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { normalizeQuotes } from '../../biz/normalize-quote.js'
-import { sameChainRawQuote, testConfig } from '../../testing/fixtures.js'
-import { runStressTests } from './stress.js'
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { normalizeQuotes } from '../../biz/normalize-quote.js';
+import { sameChainRawQuote, testConfig } from '../../testing/fixtures.js';
+import { runStressTests } from './stress.js';
 
 test('runs the complete stress matrix deterministically', () => {
-  const start = Date.parse('2026-01-01T00:00:00Z')
+  const start = Date.parse('2026-01-01T00:00:00Z');
   const quotes = normalizeQuotes([
     sameChainRawQuote({
       id: 'buy-now',
@@ -39,12 +39,12 @@ test('runs the complete stress matrix deterministically', () => {
       fromAmount: '1000000000000000000',
       toAmount: '3021000000',
     }),
-  ])
-  const first = runStressTests(testConfig(), quotes)
-  const second = runStressTests(testConfig(), quotes)
-  assert.equal(first.length, 15)
+  ]);
+  const first = runStressTests(testConfig(), quotes);
+  const second = runStressTests(testConfig(), quotes);
+  assert.equal(first.length, 15);
   assert.deepEqual(
     first.map((run) => [run.id, run.result.excessValueUsdMicros]),
     second.map((run) => [run.id, run.result.excessValueUsdMicros]),
-  )
-})
+  );
+});

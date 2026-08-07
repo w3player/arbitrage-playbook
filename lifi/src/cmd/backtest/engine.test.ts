@@ -1,12 +1,12 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { normalizeQuotes } from '../../biz/normalize-quote.js'
-import { sameChainRawQuote, testConfig } from '../../testing/fixtures.js'
-import { BacktestEngine } from './engine.js'
-import { buildOpportunityFrames } from './frames.js'
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { normalizeQuotes } from '../../biz/normalize-quote.js';
+import { sameChainRawQuote, testConfig } from '../../testing/fixtures.js';
+import { BacktestEngine } from './engine.js';
+import { buildOpportunityFrames } from './frames.js';
 
 test('pairs executable quotes and settles against future quotes', () => {
-  const start = Date.parse('2026-01-01T00:00:00Z')
+  const start = Date.parse('2026-01-01T00:00:00Z');
   const raw = [
     sameChainRawQuote({
       id: 'buy-now',
@@ -42,17 +42,17 @@ test('pairs executable quotes and settles against future quotes', () => {
       toAmount: '3021000000',
       toAmountMin: '3021000000',
     }),
-  ]
-  const config = testConfig()
-  const quotes = normalizeQuotes(raw)
-  const frames = buildOpportunityFrames(quotes, config)
-  assert.ok(frames.length > 0)
-  const first = frames[0]
-  assert.ok(first)
-  assert.equal(first.expectedNetUsdMicros, 18_000_000n)
+  ];
+  const config = testConfig();
+  const quotes = normalizeQuotes(raw);
+  const frames = buildOpportunityFrames(quotes, config);
+  assert.ok(frames.length > 0);
+  const first = frames[0];
+  assert.ok(first);
+  assert.equal(first.expectedNetUsdMicros, 18_000_000n);
 
-  const result = new BacktestEngine(config, quotes).run([first])
-  assert.equal(result.trades.length, 1)
-  assert.equal(result.trades[0]?.outcome, 'both-succeeded')
-  assert.ok(result.excessValueUsdMicros > 0n)
-})
+  const result = new BacktestEngine(config, quotes).run([first]);
+  assert.equal(result.trades.length, 1);
+  assert.equal(result.trades[0]?.outcome, 'both-succeeded');
+  assert.ok(result.excessValueUsdMicros > 0n);
+});

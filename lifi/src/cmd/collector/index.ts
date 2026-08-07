@@ -31,10 +31,6 @@ export function createCollectCommand(): Command {
     .description('collect LI.FI quotes')
     .option('-c, --config <file>', 'config JSON', 'config/backtest.example.json')
     .option('--once', 'collect one batch')
-    .addOption(
-      new Option('--stream <name>', 'quote stream')
-        .choices(['same-chain', 'rebalance', 'all'])
-        .default('all'),
-    )
+    .addOption(new Option('--stream <name>', 'quote stream').choices(['same-chain', 'rebalance', 'all']).default('all'))
     .action(collect);
 }
