@@ -14,6 +14,9 @@ importers:
 
   lifi:
     dependencies:
+      '@lifi/sdk':
+        specifier: 4.2.0
+        version: 4.2.0
       '@lifi/types':
         specifier: ^17.86.0
         version: 17.90.0
@@ -221,6 +224,12 @@ packages:
 
   '@jridgewell/sourcemap-codec@1.5.5':
     resolution: {integrity: sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==}
+
+  '@lifi/sdk@4.2.0':
+    resolution: {integrity: sha512-d0QBmAdSgnLRo+/zLlUO4oF623fVTYA8NsN9bdWHRPRQEt+zoYBG3dBBB3RhvmctDCSdBMzW+E6E7WJXqYQg/A==}
+
+  '@lifi/types@17.85.0':
+    resolution: {integrity: sha512-EueQyqhyvZbHygkyxj9EPAhUwn69ViRn9zJ56UnZlXsHlOZ/NdNVWxUwrVFVuRt/8qkdZH35R/1vE+SOxFHCNw==}
 
   '@lifi/types@17.90.0':
     resolution: {integrity: sha512-dnVyjcVmRzaAIHJawlzSq//n7hukT9qMYJW3FiZ8ipRvFx84jWVBHtmJB3Pgeq/JHFQui+zKIEXi2fWUHPp6tA==}
@@ -1586,6 +1595,12 @@ snapshots:
     optional: true
 
   '@jridgewell/sourcemap-codec@1.5.5': {}
+
+  '@lifi/sdk@4.2.0':
+    dependencies:
+      '@lifi/types': 17.85.0
+
+  '@lifi/types@17.85.0': {}
 
   '@lifi/types@17.90.0': {}
 

@@ -2,7 +2,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import pLimit from 'p-limit';
 import type { AppConfig } from '../../config.js';
 import type { RawQuoteRecord } from '../../types/types.js';
-import { LifiClient } from '../../lib/lifi-client.js';
+import { LifiClient, type QuoteClient } from '../../lib/lifi-client.js';
+import { LifiSdkClient } from '../../lib/lifi-sdk-client.js';
 import { logger } from '../../lib/logger.js';
 import { QuoteStore } from '../../biz/sqlite-store.js';
 import { buildRebalanceTasks, buildSameChainTasks } from './tasks.js';
@@ -14,13 +15,17 @@ export interface CollectorSummary {
 }
 
 export type CollectorStream = 'same-chain' | 'rebalance' | 'all';
+export type QuoteClientKind = 'ky' | 'sdk';
 
 export class QuoteCollector {
-  private readonly client: LifiClient;
+  private readonly client: QuoteClient;
   private readonly store: QuoteStore;
 
-  constructor(private readonly config: AppConfig) {
-    this.client = new LifiClient(config.lifi);
+  constructor(
+    private readonly config: AppConfig,
+    clientKind: QuoteClientKind = 'ky',
+  ) {
+    this.client = clientKind === 'sdk' ? new LifiSdkClient(config.lifi) : new LifiClient(config.lifi);
     this.store = new QuoteStore(config.sqlitePath);
   }
 
@@ -49,7 +54,7 @@ export class QuoteCollector {
     this.store.close();
   }
 
-  private async collect(task: Parameters<LifiClient['quote']>[0]): Promise<RawQuoteRecord> {
+  private async collect(task: Parameters<QuoteClient['quote']>[0]): Promise<RawQuoteRecord> {
     const record = await this.client.quote(task);
     this.store.insert(record);
     return record;

@@ -2,11 +2,45 @@ import { randomUUID } from 'node:crypto';
 import type { Step } from '@lifi/types';
 import ky, { HTTPError } from 'ky';
 import type { AppConfig } from '../config.js';
-import type { QuoteErrorRecord, QuoteTask, RawQuoteRecord } from '../types/types.js';
+import type { QuoteErrorRecord, QuoteRequestRecord, QuoteTask, RawQuoteRecord } from '../types/types.js';
+
+export interface QuoteClient {
+  quote(task: QuoteTask): Promise<RawQuoteRecord>;
+}
+
+export function createQuoteRequest(task: QuoteTask, config: AppConfig['lifi']): QuoteRequestRecord {
+  return {
+    ...task,
+    fromAddress: config.fromAddress,
+    slippage: config.slippage,
+    skipSimulation: config.skipSimulation,
+  };
+}
+
+export function createQuoteRecord(
+  started: number,
+  request: QuoteRequestRecord,
+  result: Pick<RawQuoteRecord, 'response' | 'error'>,
+): RawQuoteRecord {
+  const ended = Date.now();
+  return {
+    schemaVersion: 1,
+    id: randomUUID(),
+    requestedAt: new Date(started).toISOString(),
+    receivedAt: new Date(ended).toISOString(),
+    durationMs: ended - started,
+    request,
+    ...result,
+  };
+}
+
+export function createUnknownQuoteError(error: unknown): QuoteErrorRecord {
+  return { name: error instanceof Error ? error.name : 'UnknownError', message: String(error) };
+}
 
 function toError(error: unknown): QuoteErrorRecord {
   if (!(error instanceof HTTPError)) {
-    return { name: error instanceof Error ? error.name : 'UnknownError', message: String(error) };
+    return createUnknownQuoteError(error);
   }
   const body = error.data;
   const details = body as { code?: unknown; message?: unknown } | undefined;
@@ -19,7 +53,7 @@ function toError(error: unknown): QuoteErrorRecord {
   };
 }
 
-export class LifiClient {
+export class LifiClient implements QuoteClient {
   private readonly http;
 
   constructor(private readonly config: AppConfig['lifi']) {
@@ -27,19 +61,17 @@ export class LifiClient {
     this.http = ky.create({
       prefix: `${config.baseUrl.replace(/\/$/, '')}/`,
       timeout: config.requestTimeoutMs,
-      ...(apiKey ? { headers: { 'x-lifi-api-key': apiKey } } : {}),
+      headers: {
+        'x-lifi-integrator': config.integrator,
+        ...(apiKey ? { 'x-lifi-api-key': apiKey } : {}),
+      },
       retry: { limit: 2, methods: ['get'], statusCodes: [429, 500, 502, 503, 504], backoffLimit: 2_000 },
     });
   }
 
   async quote(task: QuoteTask): Promise<RawQuoteRecord> {
     const started = Date.now();
-    const request = {
-      ...task,
-      fromAddress: this.config.fromAddress,
-      slippage: this.config.slippage,
-      skipSimulation: this.config.skipSimulation,
-    };
+    const request = createQuoteRequest(task, this.config);
     try {
       const response = await this.http
         .get(task.amountMode === 'exact-output' ? 'quote/toAmount' : 'quote', {
@@ -50,6 +82,7 @@ export class LifiClient {
             toToken: task.toTokenAddress,
             [task.amountMode === 'exact-output' ? 'toAmount' : 'fromAmount']: task.amount,
             fromAddress: this.config.fromAddress,
+            integrator: this.config.integrator,
             slippage: this.config.slippage,
             skipSimulation: this.config.skipSimulation,
             ...(this.config.sameChainTimingStrategy
@@ -61,26 +94,9 @@ export class LifiClient {
           },
         })
         .json<Step>();
-      return this.record(started, request, { response });
+      return createQuoteRecord(started, request, { response });
     } catch (error) {
-      return this.record(started, request, { error: toError(error) });
+      return createQuoteRecord(started, request, { error: toError(error) });
     }
-  }
-
-  private record(
-    started: number,
-    request: RawQuoteRecord['request'],
-    result: Pick<RawQuoteRecord, 'response' | 'error'>,
-  ): RawQuoteRecord {
-    const ended = Date.now();
-    return {
-      schemaVersion: 1,
-      id: randomUUID(),
-      requestedAt: new Date(started).toISOString(),
-      receivedAt: new Date(ended).toISOString(),
-      durationMs: ended - started,
-      request,
-      ...result,
-    };
   }
 }

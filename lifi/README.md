@@ -20,7 +20,7 @@
 - 持续采集需要 LI.FI API key；
 - 本项目使用 Node 自带的 SQLite，不增加数据库依赖。
 
-通用功能直接使用成熟库：LI.FI 官方 `@lifi/types` 描述报价结构，`ky` 负责 HTTP 超时与重试，`p-limit` 控制并发，`zod` 校验配置，`commander` 解析命令，`csv-stringify` 生成 CSV。项目没有使用 LI.FI SDK 的 `getQuote`，因为它要求传入 `fromAmount`，而买入侧必须调用精确到账的 `/quote/toAmount`；混用 SDK 和 REST 会让代码更多。
+通用功能直接使用成熟库：LI.FI 官方 `@lifi/sdk` 和 `@lifi/types` 负责报价与类型，`ky` 提供可对照的 REST 客户端，`p-limit` 控制并发，`zod` 校验配置，`commander` 解析命令，`csv-stringify` 生成 CSV。Ky 是默认实现；SDK 实现同样支持固定投入的 `/quote` 和固定到账的 `/quote/toAmount`。
 
 依赖由你在仓库根目录安装：
 
@@ -54,6 +54,14 @@ pnpm --filter @arbitrage-playbook/lifi collect --once --stream same-chain
 ```bash
 pnpm --filter @arbitrage-playbook/lifi collect --once
 ```
+
+改用 LI.FI SDK 采集同一批报价：
+
+```bash
+pnpm --filter @arbitrage-playbook/lifi collect --once --client sdk
+```
+
+两个客户端写入相同的数据结构。Ky 版使用项目配置的 429/5xx 重试策略；SDK 版使用 SDK 自带的请求与错误处理，并额外传入项目配置的超时信号。
 
 连续采集：
 

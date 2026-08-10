@@ -1,11 +1,16 @@
 import { readFile } from 'node:fs/promises';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { z } from 'zod';
+import type { TimingStrategyString } from '@lifi/types';
 import { parseUnits, parseUsd } from './utils/index.js';
 
 const address = z.string().regex(/^0x[0-9a-fA-F]{40}$/, 'must be a 20-byte hex address');
 const positiveInt = z.number().int().positive();
 const bps = z.number().int().min(0).max(10_000);
+const timingStrategy = z.custom<TimingStrategyString>(
+  (value) => typeof value === 'string' && /^minWaitTime-\d+-\d+-\d+$/.test(value),
+  'must use minWaitTime-<milliseconds>-<results>-<milliseconds>',
+);
 const decimal = (decimals: number) =>
   z.string().refine((value) => {
     try {
@@ -21,6 +26,7 @@ export const configSchema = z
     sqlitePath: z.string().min(1),
     lifi: z.object({
       baseUrl: z.string().url(),
+      integrator: z.string().min(1).default('arbitrage-playbook'),
       fromAddress: address,
       apiKeyEnv: z.string().min(1),
       requestTimeoutMs: positiveInt,
@@ -29,8 +35,8 @@ export const configSchema = z
       skipSimulation: z.boolean(),
       sameChainIntervalMs: positiveInt,
       rebalanceIntervalMs: positiveInt,
-      sameChainTimingStrategy: z.string().optional(),
-      routeTimingStrategy: z.string().optional(),
+      sameChainTimingStrategy: timingStrategy.optional(),
+      routeTimingStrategy: timingStrategy.optional(),
     }),
     chains: z
       .array(

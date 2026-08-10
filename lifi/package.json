@@ -17,6 +17,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@lifi/sdk": "4.2.0",
     "@lifi/types": "^17.86.0",
     "commander": "^15.0.0",
     "csv-stringify": "^6.8.1",

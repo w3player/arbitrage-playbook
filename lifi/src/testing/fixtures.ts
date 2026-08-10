@@ -8,6 +8,7 @@ export function testConfig(): AppConfig {
     sqlitePath: '/tmp/lifi-test-data/quotes.sqlite',
     lifi: {
       baseUrl: 'https://li.quest/v1',
+      integrator: 'arbitrage-playbook-test',
       fromAddress: '0x000000000000000000000000000000000000dEaD',
       apiKeyEnv: 'LIFI_API_KEY',
       requestTimeoutMs: 10_000,
