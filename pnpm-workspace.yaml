@@ -3,5 +3,6 @@ packages:
   - 'layerzero-multichain-arbitrage'
 
 allowBuilds:
+  better-sqlite3: true
   esbuild: true
   unrs-resolver: false
