@@ -1,5 +1,7 @@
 packages:
   - 'lifi'
+  - 'layerzero-multichain-arbitrage'
 
 allowBuilds:
   esbuild: true
+  unrs-resolver: false

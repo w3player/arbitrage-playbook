@@ -2,6 +2,7 @@ node_modules/
 .pnpm-store/
 dist/
 lifi/data/
+layerzero-multichain-arbitrage/data/
 .env
 .env.*
 !.env.example

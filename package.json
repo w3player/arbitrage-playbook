@@ -10,7 +10,8 @@
     "check": "pnpm -r check",
     "format": "vp fmt . --write",
     "format:check": "vp fmt . --check",
-    "lifi": "pnpm --filter @arbitrage-playbook/lifi"
+    "lifi": "pnpm --filter @arbitrage-playbook/lifi",
+    "lma": "pnpm --filter @arbitrage-playbook/layerzero-multichain-arbitrage"
   },
   "devDependencies": {
     "vite-plus": "0.2.6"
