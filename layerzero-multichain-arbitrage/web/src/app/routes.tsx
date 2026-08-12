@@ -10,6 +10,7 @@ import { formatDateTime } from '@/lib/format';
 import { AssetsPage } from '@/pages/assets-page';
 import { ExecutionPage } from '@/pages/execution-page';
 import { PriceScanPage } from '@/pages/price-scan-page';
+import { SpotPricePage } from '@/pages/spot-price-page';
 
 function RootLayout() {
   const location = useLocation();
@@ -124,6 +125,7 @@ export function AppRoutes() {
       <Route element={<RootLayout />}>
         <Route index element={<Navigate replace to="/assets" />} />
         <Route element={<AssetsPage />} path="assets" />
+        <Route element={<SpotPricePage />} path="market-prices" />
         <Route element={<PriceScanPage />} path="prices" />
         <Route element={<ExecutionPage />} path="execution" />
         <Route path="*" element={<Navigate replace to="/assets" />} />

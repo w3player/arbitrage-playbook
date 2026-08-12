@@ -1,4 +1,4 @@
-import { Boxes, ChartNoAxesCombined, CircleDollarSign } from 'lucide-react';
+import { Boxes, ChartNoAxesCombined, CircleDollarSign, ScanLine } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export interface NavigationItem {
@@ -17,9 +17,15 @@ export const navigationItems: NavigationItem[] = [
     icon: Boxes,
   },
   {
+    to: '/market-prices',
+    label: '全链现价',
+    description: '比较各链 DEX 池价',
+    icon: ScanLine,
+  },
+  {
     to: '/prices',
     label: '价差扫描',
-    description: '比较多链价格与成本',
+    description: 'LI.FI 可执行报价比较',
     icon: ChartNoAxesCombined,
   },
   {
