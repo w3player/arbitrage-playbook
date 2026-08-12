@@ -71,6 +71,7 @@ export class ScanService {
   private readonly metadataUrl: string;
   private readonly scanChains: ScanChainsConf;
   private readonly contractClients: Record<string, OftContractClient>;
+  private activeScan: Promise<ScanSummary> | null = null;
 
   constructor(
     @InjectRepository(AssetEntity)
@@ -96,8 +97,49 @@ export class ScanService {
     );
   }
 
-  async scan(): Promise<ScanSummary> {
+  triggerScan(): boolean {
+    if (this.activeScan) {
+      this.logger.log(
+        'OFT scan trigger ignored because a scan is already active',
+      );
+      return false;
+    }
+
+    void this.scan().catch(() => undefined);
+    return true;
+  }
+
+  scan(): Promise<ScanSummary> {
+    if (this.activeScan) {
+      this.logger.log('OFT scan request joined the active scan');
+      return this.activeScan;
+    }
+
+    const startedAt = Date.now();
+    this.logger.log(
+      `OFT scan started: chains=${Object.keys(this.scanChains).join(',')}`,
+    );
+    this.activeScan = this.executeScan(startedAt)
+      .catch((error: unknown) => {
+        this.logger.error(
+          `OFT scan aborted after ${Date.now() - startedAt}ms: ${this.errorMessage(error)}`,
+        );
+        throw error;
+      })
+      .finally(() => {
+        this.activeScan = null;
+      });
+
+    return this.activeScan;
+  }
+
+  private async executeScan(startedAt: number): Promise<ScanSummary> {
+    const metadataStartedAt = Date.now();
     const metadata = await this.fetchMetadata();
+    const targetDeploymentCount = this.countTargetDeployments(metadata);
+    this.logger.log(
+      `LayerZero metadata loaded: symbols=${Object.keys(metadata).length}, targetDeployments=${targetDeploymentCount}, durationMs=${Date.now() - metadataStartedAt}`,
+    );
     const summary: ScanSummary = {
       assets: 0,
       deployments: 0,
@@ -154,10 +196,19 @@ export class ScanService {
             deployment,
           );
           summary[result] += 1;
+          if (
+            summary.deployments % 10 === 0 ||
+            summary.deployments === targetDeploymentCount
+          ) {
+            this.logger.log(
+              `OFT scan progress: ${summary.deployments}/${targetDeploymentCount}, verified=${summary.verified}, rejected=${summary.rejected}, failed=${summary.failed}, unchanged=${summary.unchanged}`,
+            );
+          }
         }
       }
     }
 
+    this.logger.log('Reconciling deployments missing from metadata');
     if (seenDeployments.size > 0) {
       await this.markMissingDeployments(seenDeployments);
     } else {
@@ -165,11 +216,38 @@ export class ScanService {
         'LayerZero metadata contains no supported OFT deployments; skipping missing-deployment reconciliation',
       );
     }
+    this.logger.log('Verifying reverse LayerZero peers');
     await this.verifyReversePeers();
+    this.logger.log('Refreshing cross-chain asset states');
     await this.refreshAssets();
 
-    this.logger.log(`OFT scan completed: ${JSON.stringify(summary)}`);
+    this.logger.log(
+      `OFT scan completed in ${Date.now() - startedAt}ms: ${JSON.stringify(summary)}`,
+    );
     return summary;
+  }
+
+  private countTargetDeployments(metadata: OftMetadataResponse): number {
+    let count = 0;
+    for (const entries of Object.values(metadata)) {
+      if (!Array.isArray(entries)) {
+        continue;
+      }
+      for (const entry of entries) {
+        if (
+          !this.isMetadataEntry(entry) ||
+          entry.endpointVersion.toLowerCase() !== 'v2'
+        ) {
+          continue;
+        }
+        count += Object.entries(entry.deployments).filter(
+          ([chainName, deployment]) =>
+            !!this.scanChains[chainName.toLowerCase()] &&
+            this.isMetadataDeployment(deployment),
+        ).length;
+      }
+    }
+    return count;
   }
 
   private async fetchMetadata(): Promise<OftMetadataResponse> {
@@ -303,13 +381,20 @@ export class ScanService {
       lastMetadataSeenAt: new Date().toISOString(),
     };
 
-    if (existing && !this.needsContractProbe(existing, metadataHash)) {
+    const probeReason = existing
+      ? this.contractProbeReason(existing, metadataHash)
+      : 'new_deployment';
+    if (existing && !probeReason) {
       if ((existing.evidence?.metadataMissingCount ?? 0) > 0) {
         existing.evidence = evidence;
         await this.deploymentRepository.save(existing);
       }
       return 'unchanged';
     }
+
+    this.logger.log(
+      `Probing OFT contract: symbol=${symbol}, chain=${chainName}, address=${oftAddress}, reason=${probeReason}`,
+    );
 
     const deployment = this.deploymentRepository.create({
       ...existing,
@@ -476,28 +561,30 @@ export class ScanService {
     }
   }
 
-  private needsContractProbe(
+  private contractProbeReason(
     deployment: DeploymentEntity,
     metadataHash: string,
-  ): boolean {
+  ): string | null {
     if (deployment.evidence?.metadataHash !== metadataHash) {
-      return true;
+      return 'metadata_changed';
     }
-    if (
-      deployment.scanStatus === DeploymentScanStatus.DISCOVERED ||
-      deployment.scanStatus === DeploymentScanStatus.FAILED ||
-      deployment.errorReason === 'METADATA_REMOVED'
-    ) {
-      return true;
+    if (deployment.scanStatus === DeploymentScanStatus.DISCOVERED) {
+      return 'not_scanned';
+    }
+    if (deployment.scanStatus === DeploymentScanStatus.FAILED) {
+      return 'retry_failed';
+    }
+    if (deployment.errorReason === 'METADATA_REMOVED') {
+      return 'metadata_restored';
     }
     if (!deployment.lastScannedAt) {
-      return true;
+      return 'missing_scan_time';
     }
 
-    return (
-      Date.now() - new Date(deployment.lastScannedAt).getTime() >=
+    return Date.now() - new Date(deployment.lastScannedAt).getTime() >=
       AppConf.layerZero.contractRefreshMs
-    );
+      ? 'periodic_refresh'
+      : null;
   }
 
   private async markMissingDeployments(

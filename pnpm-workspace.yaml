@@ -1,6 +1,11 @@
 packages:
   - 'lifi'
   - 'layerzero-multichain-arbitrage'
+  - 'layerzero-multichain-arbitrage/web'
+
+catalog:
+  vite: ^8.2.0
+  vite-plus: 0.2.6
 
 allowBuilds:
   better-sqlite3: true
