@@ -27,3 +27,9 @@ export type {
   LifiQuoteRequest,
   LifiQuoteResult,
 } from './lifi-quote.client';
+export { DexScreenerClient } from './dex-screener.client';
+export type {
+  DexScreenerClientOptions,
+  DexScreenerPair,
+  DexScreenerToken,
+} from './dex-screener.client';

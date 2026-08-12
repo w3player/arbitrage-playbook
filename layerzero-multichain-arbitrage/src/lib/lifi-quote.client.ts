@@ -52,9 +52,9 @@ export class LifiQuoteClient {
     const params = {
       fromChain: request.chainId,
       toChain: request.chainId,
-      fromToken: request.fromToken,
-      toToken: request.toToken,
-      fromAddress: this.options.fromAddress,
+      fromToken: request.fromToken.toLowerCase(),
+      toToken: request.toToken.toLowerCase(),
+      fromAddress: this.options.fromAddress.toLowerCase(),
       slippage: this.options.slippage,
       skipSimulation: false,
       swapStepTimingStrategies: ['minWaitTime-300-1-300' as const],
