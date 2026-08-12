@@ -16,9 +16,9 @@ import { ALL_ENTITIES } from './database';
     ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (cs: ConfigService) => ({
+      useFactory: (configService: ConfigService) => ({
         type: 'better-sqlite3',
-        database: cs.getOrThrow<string>('DATABASE_PATH'),
+        database: configService.getOrThrow<string>('DATABASE_PATH'),
         autoLoadEntities: true,
         synchronize: false,
       }),
@@ -26,6 +26,6 @@ import { ALL_ENTITIES } from './database';
     TypeOrmModule.forFeature(ALL_ENTITIES),
   ],
   controllers: CONTROLLERS,
-  providers: [...SERVICES],
+  providers: SERVICES,
 })
 export class AppModule {}

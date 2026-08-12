@@ -13,7 +13,7 @@ export default new DataSource({
   type: 'better-sqlite3',
   database: databasePath,
   entities: ALL_ENTITIES,
-  migrations: [join(__dirname, 'migrations', '*.js')],
+  migrations: [join(__dirname, 'migrations', '*.{js,ts}')],
   migrationsTableName: 'typeorm_migrations',
   migrationsRun: false,
   synchronize: false,
