@@ -23,7 +23,7 @@ export function ScanAction({ compact = false }: { compact?: boolean }) {
 
   if (compact) {
     return (
-      <Button className="h-11" disabled={triggering || running} onClick={handleTrigger} type="button">
+      <Button className="h-9 px-3 text-xs" disabled={triggering || running} onClick={handleTrigger} type="button">
         <RefreshCw className={running ? 'animate-spin' : undefined} data-icon="inline-start" />
         {running ? '扫描中' : '立即扫描'}
       </Button>
@@ -31,7 +31,7 @@ export function ScanAction({ compact = false }: { compact?: boolean }) {
   }
 
   return (
-    <section className="rounded-xl border bg-card p-5 shadow-xs" aria-labelledby="scan-action-title">
+    <section className="rounded-lg border bg-card p-4 shadow-xs" aria-labelledby="scan-action-title">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Scanner worker</p>
@@ -41,7 +41,7 @@ export function ScanAction({ compact = false }: { compact?: boolean }) {
         </div>
         <StatusBadge value={scanStatus?.state ?? 'idle'} />
       </div>
-      <dl className="mt-5 grid grid-cols-2 gap-4 border-y py-4 text-sm">
+      <dl className="mt-3 grid grid-cols-2 gap-3 border-y py-3 text-xs">
         <div>
           <dt className="text-muted-foreground">最近完成</dt>
           <dd className="mt-1 font-mono text-xs font-medium">{formatDateTime(scanStatus?.completedAt ?? null)}</dd>
@@ -51,11 +51,16 @@ export function ScanAction({ compact = false }: { compact?: boolean }) {
           <dd className="mt-1 font-mono font-semibold">{scanStatus?.summary?.deployments ?? '—'}</dd>
         </div>
       </dl>
-      <Button className="mt-5 h-11 w-full" disabled={triggering || running} onClick={handleTrigger} type="button">
+      <Button
+        className="mt-3 h-9 w-full text-xs"
+        disabled={triggering || running}
+        onClick={handleTrigger}
+        type="button"
+      >
         <RefreshCw className={running ? 'animate-spin' : undefined} data-icon="inline-start" />
         {running ? '扫描正在后台运行' : '启动新扫描'}
       </Button>
-      <p className="mt-3 min-h-5 text-xs leading-5 text-muted-foreground" aria-live="polite">
+      <p className="mt-2 min-h-4 text-[11px] leading-4 text-muted-foreground" aria-live="polite">
         {feedback ?? '任务异步执行，页面会在完成后自动刷新。'}
       </p>
     </section>

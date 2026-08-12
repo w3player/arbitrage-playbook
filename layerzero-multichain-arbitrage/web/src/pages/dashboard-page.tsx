@@ -1,4 +1,4 @@
-import { Activity, BadgeCheck, Boxes, Route as RouteIcon, TriangleAlert } from 'lucide-react';
+import { Activity, BadgeCheck, Boxes, LockKeyhole, Route as RouteIcon, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 
@@ -34,9 +34,9 @@ export function DashboardPage() {
           <p className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-primary">
             Operations overview
           </p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">跨链套利工作台</h1>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">跨链套利指挥中心</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            先建立可信的 LayerZero 多链资产池，再进入价格检查与执行阶段。
+            监控从资产发现、链上验证、市场分析到受限执行的完整链路。当前处于 P1 只读资产扫描阶段。
           </p>
         </div>
         <div className="sm:hidden">
@@ -138,13 +138,17 @@ export function DashboardPage() {
               <div className="flex items-center gap-2">
                 <Activity className="size-4 text-primary" aria-hidden="true" />
                 <h2 className="font-semibold" id="pipeline-title">
-                  套利流水线
+                  系统流水线
                 </h2>
               </div>
-              <ol className="mt-5 space-y-4 text-sm">
-                <PipelineStep label="跨链资产扫描" state="active" />
-                <PipelineStep label="DEX / CEX 价差检查" state="planned" />
-                <PipelineStep label="交易与跨链执行" state="planned" />
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">严格按 plan.md 的数据门槛逐层开放。</p>
+              <ol className="mt-5 space-y-2 text-sm">
+                <PipelineStep label="资产发现" stage="P1" state="active" to="/assets" />
+                <PipelineStep label="链上验证" stage="P2" state="next" to="/topology" />
+                <PipelineStep label="市场数据" stage="P3" state="locked" to="/markets" />
+                <PipelineStep label="机会决策" stage="P3" state="locked" to="/opportunities" />
+                <PipelineStep label="库存与执行" stage="P4+" state="locked" to="/executions" />
+                <PipelineStep label="风控与审计" stage="全程" state="guarded" to="/risk" />
               </ol>
             </section>
           </div>
@@ -187,16 +191,39 @@ function MetricCard({ icon: Icon, label, value, detail, tone = 'neutral' }: Metr
   );
 }
 
-function PipelineStep({ label, state }: { label: string; state: 'active' | 'planned' }) {
+function PipelineStep({
+  label,
+  stage,
+  state,
+  to,
+}: {
+  label: string;
+  stage: string;
+  state: 'active' | 'next' | 'locked' | 'guarded';
+  to: string;
+}) {
+  const status = {
+    active: '当前',
+    next: '待验证',
+    locked: '未开放',
+    guarded: '安全模式',
+  }[state];
   return (
-    <li className="flex items-center gap-3">
-      <span
-        className={`grid size-6 shrink-0 place-items-center rounded-full border font-mono text-[10px] font-semibold ${state === 'active' ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-border bg-muted text-muted-foreground'}`}
+    <li>
+      <Link
+        className="flex min-h-10 items-center gap-3 rounded-lg px-2 outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+        to={to}
       >
-        {state === 'active' ? '01' : '·'}
-      </span>
-      <span className={state === 'active' ? 'font-medium' : 'text-muted-foreground'}>{label}</span>
-      <span className="ms-auto text-xs text-muted-foreground">{state === 'active' ? '运行中' : '下一阶段'}</span>
+        <span
+          className={`grid size-6 shrink-0 place-items-center rounded-md border font-mono text-[9px] font-semibold ${state === 'active' ? 'border-blue-200 bg-blue-50 text-blue-700' : state === 'guarded' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-border bg-muted text-muted-foreground'}`}
+        >
+          {state === 'locked' ? <LockKeyhole className="size-3" aria-hidden="true" /> : stage}
+        </span>
+        <span className={state === 'active' || state === 'guarded' ? 'font-medium' : 'text-muted-foreground'}>
+          {label}
+        </span>
+        <span className="ms-auto text-[11px] text-muted-foreground">{status}</span>
+      </Link>
     </li>
   );
 }
