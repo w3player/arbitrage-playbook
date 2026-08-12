@@ -8,6 +8,7 @@ import { SERVICES } from './services';
 import { ALL_ENTITIES } from './database';
 import { CreateAssetScannerTables1723420800000 } from './database/migrations/1723420800000-CreateAssetScannerTables';
 import { CreateScanState1786464000000 } from './database/migrations/1786464000000-CreateScanState';
+import { CreateMarketQuotes1786550400000 } from './database/migrations/1786550400000-CreateMarketQuotes';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { CreateScanState1786464000000 } from './database/migrations/178646400000
         migrations: [
           CreateAssetScannerTables1723420800000,
           CreateScanState1786464000000,
+          CreateMarketQuotes1786550400000,
         ],
         migrationsTableName: 'typeorm_migrations',
         migrationsRun: true,

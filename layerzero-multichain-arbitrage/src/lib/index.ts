@@ -15,3 +15,15 @@ export type {
   LayerZeroScanPage,
   LayerZeroScanPageRequest,
 } from './layerzero-scan.client';
+export {
+  LifiQuoteClient,
+  parseDecimal,
+  quoteCostUsdMicros,
+} from './lifi-quote.client';
+export type {
+  LifiQuoteClientOptions,
+  LifiQuoteError,
+  LifiQuoteMode,
+  LifiQuoteRequest,
+  LifiQuoteResult,
+} from './lifi-quote.client';

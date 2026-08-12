@@ -23,6 +23,8 @@
     "tm:run": "pnpm build && typeorm migration:run -d ./dist/database/data-source-for-migrations.js"
   },
   "dependencies": {
+    "@lifi/sdk": "4.2.0",
+    "@lifi/types": "^17.86.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.1",

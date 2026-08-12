@@ -22,3 +22,14 @@ export enum DeploymentScanStatus {
   REJECTED = 'rejected',
   FAILED = 'failed',
 }
+
+export enum MarketQuoteSide {
+  PROBE = 'probe',
+  BUY = 'buy',
+  SELL = 'sell',
+}
+
+export enum MarketQuoteStatus {
+  SUCCESS = 'success',
+  FAILED = 'failed',
+}
