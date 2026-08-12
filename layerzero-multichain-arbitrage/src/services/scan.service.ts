@@ -13,17 +13,24 @@ import {
 } from '../config/enums';
 import { AssetEntity } from '../database/entities/asset.entity';
 import {
+  DiscoveryEvidence,
   DeploymentEntity,
   DeploymentEvidence,
 } from '../database/entities/deployment.entity';
+import { ScanStateEntity } from '../database/entities/scan-state.entity';
 import type { ScanStatusResponseDto, ScanSummaryDto } from '../dto/scan.dto';
 import {
+  LayerZeroScanClient,
   OFT_INTERFACE_ID,
   OftContractClient,
   addressFromBytes32,
   normalizeEvmAddress,
 } from '../lib';
-import type { OftChainConfig } from '../lib';
+import type {
+  LayerZeroScanMessage,
+  OftChainConfig,
+  OftContractProbe,
+} from '../lib';
 
 type ScanChainsConf = Record<string, OftChainConfig>;
 
@@ -44,6 +51,11 @@ interface OftMetadataEntry {
 
 type OftMetadataResponse = Record<string, OftMetadataEntry[]>;
 
+interface DiscoveredOft {
+  asset: AssetEntity;
+  deployment: DeploymentEntity;
+}
+
 export function classifyStandardOft(
   oftAddress: string,
   tokenAddress: string,
@@ -62,6 +74,8 @@ export class ScanService {
   private readonly metadataUrl: string;
   private readonly scanChains: ScanChainsConf;
   private readonly contractClients: Record<string, OftContractClient>;
+  private readonly scanApiClient: LayerZeroScanClient;
+  private readonly chainNamesByEndpointId: ReadonlyMap<number, string>;
   private activeScan: Promise<ScanSummaryDto> | null = null;
   private scanStatus: ScanStatusResponseDto = {
     state: 'idle',
@@ -76,6 +90,8 @@ export class ScanService {
     private readonly assetRepository: Repository<AssetEntity>,
     @InjectRepository(DeploymentEntity)
     private readonly deploymentRepository: Repository<DeploymentEntity>,
+    @InjectRepository(ScanStateEntity)
+    private readonly scanStateRepository: Repository<ScanStateEntity>,
   ) {
     this.metadataUrl = AppConf.layerZero.oftMetadataUrl;
     this.scanChains = Object.fromEntries(
@@ -91,6 +107,13 @@ export class ScanService {
       Object.entries(this.scanChains).map(([chainName, chain]) => [
         chainName,
         new OftContractClient(chain, endpointIds),
+      ]),
+    );
+    this.scanApiClient = new LayerZeroScanClient(AppConf.layerZero.scanApiUrl);
+    this.chainNamesByEndpointId = new Map(
+      Object.entries(this.scanChains).map(([chainName, chain]) => [
+        chain.endpointId,
+        chainName,
       ]),
     );
   }
@@ -165,7 +188,16 @@ export class ScanService {
 
   private async executeScan(startedAt: number): Promise<ScanSummaryDto> {
     const metadataStartedAt = Date.now();
-    const metadata = await this.fetchMetadata();
+    let metadata: OftMetadataResponse = {};
+    let metadataLoaded = false;
+    try {
+      metadata = await this.fetchMetadata();
+      metadataLoaded = true;
+    } catch (error) {
+      this.logger.warn(
+        `LayerZero metadata unavailable; continuing with message discovery: ${this.errorMessage(error)}`,
+      );
+    }
     const targetDeploymentCount = this.countTargetDeployments(metadata);
     this.logger.log(
       `LayerZero metadata loaded: symbols=${Object.keys(metadata).length}, targetDeployments=${targetDeploymentCount}, durationMs=${Date.now() - metadataStartedAt}`,
@@ -238,10 +270,13 @@ export class ScanService {
       }
     }
 
+    this.logger.log('Discovering OFTs from LayerZero cross-chain messages');
+    await this.discoverFromLayerZeroMessages(summary);
+
     this.logger.log('Reconciling deployments missing from metadata');
-    if (seenDeployments.size > 0) {
+    if (metadataLoaded && seenDeployments.size > 0) {
       await this.markMissingDeployments(seenDeployments);
-    } else {
+    } else if (metadataLoaded) {
       this.logger.warn(
         'LayerZero metadata contains no supported OFT deployments; skipping missing-deployment reconciliation',
       );
@@ -300,6 +335,467 @@ export class ScanService {
     return data as OftMetadataResponse;
   }
 
+  private async discoverFromLayerZeroMessages(
+    summary: ScanSummaryDto,
+  ): Promise<void> {
+    const stateKey = 'layerzero_message_discovery';
+    const storedState = await this.scanStateRepository.findOne({
+      where: { key: stateKey },
+    });
+    const state =
+      storedState ??
+      this.scanStateRepository.create({ key: stateKey, value: {} });
+    const previous = state.value ?? {};
+    const now = new Date();
+    const hasOpenWindow = !!previous.windowStart && !!previous.windowEnd;
+    const lastCompletedAt = previous.lastCompletedAt
+      ? new Date(previous.lastCompletedAt)
+      : null;
+    const fallbackStart = new Date(
+      now.getTime() - AppConf.layerZero.messageDiscoveryLookbackMs,
+    );
+    const incrementalStart =
+      lastCompletedAt && !Number.isNaN(lastCompletedAt.getTime())
+        ? new Date(
+            lastCompletedAt.getTime() -
+              AppConf.layerZero.messageDiscoveryOverlapMs,
+          )
+        : fallbackStart;
+    const windowStart = hasOpenWindow
+      ? previous.windowStart!
+      : incrementalStart.toISOString();
+    const windowEnd = hasOpenWindow ? previous.windowEnd! : now.toISOString();
+    let nextToken = hasOpenWindow ? previous.nextToken : undefined;
+    const processed = new Map<string, DiscoveredOft | null>();
+    let pages = 0;
+    let messages = 0;
+
+    this.logger.log(
+      `LayerZero message discovery window: start=${windowStart}, end=${windowEnd}, resume=${!!nextToken}`,
+    );
+
+    while (pages < AppConf.layerZero.messageDiscoveryMaxPagesPerScan) {
+      const page = await this.scanApiClient.fetchMessagesPage({
+        endpointIds: [...this.chainNamesByEndpointId.keys()],
+        start: windowStart,
+        end: windowEnd,
+        limit: AppConf.layerZero.messageDiscoveryPageSize,
+        nextToken,
+      });
+      pages += 1;
+      messages += page.messages.length;
+
+      const likelyMessages = this.uniqueMessagePathways(
+        page.messages.filter((message) => this.isLikelyOftMessage(message)),
+      );
+      const verifiedBeforePage = summary.verified;
+      const prefetchedProbes =
+        await this.prefetchMessageCandidates(likelyMessages);
+      for (const message of likelyMessages) {
+        await this.discoverMessageTopology(
+          message,
+          processed,
+          prefetchedProbes,
+          summary,
+        );
+      }
+      if (summary.verified > verifiedBeforePage) {
+        await this.verifyReversePeers();
+        await this.refreshAssets();
+      }
+
+      nextToken = page.nextToken ?? undefined;
+      state.value = nextToken
+        ? {
+            ...previous,
+            windowStart,
+            windowEnd,
+            nextToken,
+          }
+        : { lastCompletedAt: windowEnd };
+      await this.scanStateRepository.save(state);
+
+      this.logger.log(
+        `LayerZero message discovery progress: pages=${pages}, messages=${messages}, uniqueContracts=${processed.size}, hasNextPage=${!!nextToken}`,
+      );
+      if (!nextToken) {
+        this.logger.log(
+          `LayerZero message discovery completed: pages=${pages}, messages=${messages}, uniqueContracts=${processed.size}`,
+        );
+        return;
+      }
+    }
+
+    this.logger.warn(
+      `LayerZero message discovery paused at page limit ${AppConf.layerZero.messageDiscoveryMaxPagesPerScan}; the next scan will resume the same window`,
+    );
+  }
+
+  private async discoverMessageTopology(
+    message: LayerZeroScanMessage,
+    processed: Map<string, DiscoveredOft | null>,
+    prefetchedProbes: ReadonlyMap<string, OftContractProbe | null>,
+    summary: ScanSummaryDto,
+  ): Promise<void> {
+    const sourceChain = this.chainNamesByEndpointId.get(
+      message.sourceEndpointId,
+    );
+    const destinationChain = this.chainNamesByEndpointId.get(
+      message.destinationEndpointId,
+    );
+    const senderAddress = normalizeEvmAddress(message.senderAddress);
+    const receiverAddress = normalizeEvmAddress(message.receiverAddress);
+    if (
+      !sourceChain ||
+      !destinationChain ||
+      !senderAddress ||
+      !receiverAddress
+    ) {
+      return;
+    }
+
+    const evidence: DiscoveryEvidence = {
+      source: 'layerzero_scan_message',
+      url: this.scanApiClient.messageUrl(message),
+      observedAt: message.created ?? new Date().toISOString(),
+      guid: message.guid ?? undefined,
+      transactionHash: message.sourceTransactionHash ?? undefined,
+      sourceEndpointId: message.sourceEndpointId,
+      destinationEndpointId: message.destinationEndpointId,
+    };
+    const queue: Array<{ chainName: string; oftAddress: string }> = [
+      { chainName: sourceChain, oftAddress: senderAddress },
+      { chainName: destinationChain, oftAddress: receiverAddress },
+    ];
+    const visited = new Set<string>();
+    let topologyAsset = await this.findExistingAssetForCandidates(queue);
+
+    while (queue.length > 0) {
+      const candidate = queue.shift()!;
+      const key = this.deploymentKey(candidate.chainName, candidate.oftAddress);
+      if (visited.has(key)) {
+        continue;
+      }
+      visited.add(key);
+
+      const discovered = await this.discoverMessageCandidate(
+        candidate.chainName,
+        candidate.oftAddress,
+        evidence,
+        topologyAsset,
+        processed,
+        prefetchedProbes,
+        summary,
+      );
+      if (!discovered) {
+        continue;
+      }
+
+      if (topologyAsset && topologyAsset.id !== discovered.asset.id) {
+        discovered.deployment.assetId = topologyAsset.id;
+        await this.deploymentRepository.save(discovered.deployment);
+        discovered.asset = topologyAsset;
+      } else {
+        topologyAsset = discovered.asset;
+      }
+
+      for (const peer of Object.values(discovered.deployment.peers ?? {})) {
+        const peerChain = this.chainNamesByEndpointId.get(peer.endpointId);
+        const peerAddress = addressFromBytes32(peer.peer);
+        if (peerChain && peerAddress) {
+          queue.push({ chainName: peerChain, oftAddress: peerAddress });
+        }
+      }
+    }
+  }
+
+  private isLikelyOftMessage(message: LayerZeroScanMessage): boolean {
+    const payload = message.sourcePayload;
+    if (!payload || !/^0x[0-9a-fA-F]+$/.test(payload)) {
+      return false;
+    }
+    const byteLength = (payload.length - 2) / 2;
+    return byteLength === 40 || byteLength >= 72;
+  }
+
+  private uniqueMessagePathways(
+    messages: readonly LayerZeroScanMessage[],
+  ): LayerZeroScanMessage[] {
+    const unique = new Map<string, LayerZeroScanMessage>();
+    for (const message of messages) {
+      const key = [
+        message.sourceEndpointId,
+        message.senderAddress.toLowerCase(),
+        message.destinationEndpointId,
+        message.receiverAddress.toLowerCase(),
+      ].join(':');
+      if (!unique.has(key)) {
+        unique.set(key, message);
+      }
+    }
+    return [...unique.values()];
+  }
+
+  private async prefetchMessageCandidates(
+    messages: readonly LayerZeroScanMessage[],
+  ): Promise<Map<string, OftContractProbe | null>> {
+    const candidates = new Map<
+      string,
+      { chainName: string; oftAddress: string }
+    >();
+    for (const message of messages) {
+      const pairs = [
+        [message.sourceEndpointId, message.senderAddress],
+        [message.destinationEndpointId, message.receiverAddress],
+      ] as const;
+      for (const [endpointId, rawAddress] of pairs) {
+        const chainName = this.chainNamesByEndpointId.get(endpointId);
+        const oftAddress = normalizeEvmAddress(rawAddress);
+        if (chainName && oftAddress) {
+          candidates.set(this.deploymentKey(chainName, oftAddress), {
+            chainName,
+            oftAddress,
+          });
+        }
+      }
+    }
+
+    const results = new Map<string, OftContractProbe | null>();
+    await this.mapWithConcurrency(
+      [...candidates.entries()],
+      8,
+      async ([key, candidate]) => {
+        const existing = await this.deploymentRepository.findOne({
+          where: candidate,
+        });
+        if (existing?.scanStatus === DeploymentScanStatus.VERIFIED) {
+          return;
+        }
+        try {
+          const probe = await this.contractClients[candidate.chainName].probe(
+            candidate.oftAddress,
+          );
+          results.set(key, probe);
+        } catch {
+          results.set(key, null);
+        }
+      },
+    );
+    return results;
+  }
+
+  private async mapWithConcurrency<T>(
+    items: readonly T[],
+    concurrency: number,
+    operation: (item: T) => Promise<void>,
+  ): Promise<void> {
+    let index = 0;
+    const workers = Array.from(
+      { length: Math.min(concurrency, items.length) },
+      async () => {
+        while (index < items.length) {
+          const item = items[index];
+          index += 1;
+          await operation(item);
+        }
+      },
+    );
+    await Promise.all(workers);
+  }
+
+  private async discoverMessageCandidate(
+    chainName: string,
+    oftAddress: string,
+    source: DiscoveryEvidence,
+    preferredAsset: AssetEntity | null,
+    processed: Map<string, DiscoveredOft | null>,
+    prefetchedProbes: ReadonlyMap<string, OftContractProbe | null>,
+    summary: ScanSummaryDto,
+  ): Promise<DiscoveredOft | null> {
+    const key = this.deploymentKey(chainName, oftAddress);
+    if (processed.has(key)) {
+      const cached = processed.get(key) ?? null;
+      if (cached && preferredAsset && cached.asset.id !== preferredAsset.id) {
+        cached.deployment.assetId = preferredAsset.id;
+        await this.deploymentRepository.save(cached.deployment);
+        cached.asset = preferredAsset;
+      }
+      return cached;
+    }
+
+    const existing = await this.deploymentRepository.findOne({
+      where: { chainName, oftAddress },
+    });
+    let asset = existing
+      ? await this.assetRepository.findOne({ where: { id: existing.assetId } })
+      : null;
+    if (
+      existing &&
+      asset &&
+      existing.scanStatus === DeploymentScanStatus.VERIFIED
+    ) {
+      existing.evidence = this.appendDiscoveryEvidence(
+        existing.evidence,
+        source,
+      );
+      if (preferredAsset && preferredAsset.id !== asset.id) {
+        existing.assetId = preferredAsset.id;
+        asset = preferredAsset;
+      }
+      await this.deploymentRepository.save(existing);
+      const result = { asset, deployment: existing };
+      processed.set(key, result);
+      summary.unchanged += 1;
+      return result;
+    }
+
+    const chainConf = this.scanChains[chainName];
+    if (!chainConf) {
+      processed.set(key, null);
+      summary.skipped += 1;
+      return null;
+    }
+
+    const deployment = this.deploymentRepository.create({
+      ...existing,
+      chainName,
+      oftAddress,
+      evidence: this.appendDiscoveryEvidence(existing?.evidence ?? {}, source),
+      peers: existing?.peers ?? {},
+      quote: existing?.quote ?? {},
+      scanStatus: DeploymentScanStatus.DISCOVERED,
+      errorReason: null,
+      lastScannedAt: new Date(),
+    });
+
+    try {
+      const prefetchedProbe = prefetchedProbes.get(key);
+      if (prefetchedProbes.has(key) && !prefetchedProbe) {
+        processed.set(key, null);
+        summary.skipped += 1;
+        return null;
+      }
+      await this.probeDeployment(
+        deployment,
+        chainConf,
+        prefetchedProbe ?? undefined,
+      );
+    } catch {
+      processed.set(key, null);
+      summary.skipped += 1;
+      return null;
+    }
+    if (deployment.scanStatus !== DeploymentScanStatus.VERIFIED) {
+      processed.set(key, null);
+      summary.rejected += 1;
+      return null;
+    }
+
+    asset =
+      asset ?? preferredAsset ?? (await this.findAssetFromPeers(deployment));
+    let createdAsset = false;
+    if (!asset) {
+      const sourceKey = `onchain:${chainName}:${oftAddress}`;
+      asset = await this.assetRepository.findOne({ where: { sourceKey } });
+      if (!asset) {
+        asset = await this.assetRepository.save(
+          this.assetRepository.create({
+            sourceKey,
+            name: deployment.name ?? deployment.symbol ?? 'Unknown OFT',
+            symbol: deployment.symbol ?? 'UNKNOWN',
+            status: AssetStatus.PENDING,
+            trustGrade: TrustGrade.C,
+          }),
+        );
+        createdAsset = true;
+      }
+    }
+
+    deployment.assetId = asset.id;
+    await this.deploymentRepository.save(deployment);
+    if (
+      (deployment.name && asset.name !== deployment.name) ||
+      (deployment.symbol && asset.symbol !== deployment.symbol)
+    ) {
+      asset.name = deployment.name ?? asset.name;
+      asset.symbol = deployment.symbol ?? asset.symbol;
+      asset = await this.assetRepository.save(asset);
+    }
+
+    const result = { asset, deployment };
+    processed.set(key, result);
+    summary.deployments += 1;
+    summary.verified += 1;
+    if (createdAsset) {
+      summary.assets += 1;
+    }
+    this.logger.log(
+      `Discovered active OFT from LayerZero messages: symbol=${deployment.symbol}, chain=${chainName}, address=${oftAddress}, type=${deployment.assetType}`,
+    );
+    return result;
+  }
+
+  private async findExistingAssetForCandidates(
+    candidates: ReadonlyArray<{ chainName: string; oftAddress: string }>,
+  ): Promise<AssetEntity | null> {
+    for (const candidate of candidates) {
+      const deployment = await this.deploymentRepository.findOne({
+        where: {
+          chainName: candidate.chainName,
+          oftAddress: candidate.oftAddress,
+        },
+      });
+      if (deployment) {
+        const asset = await this.assetRepository.findOne({
+          where: { id: deployment.assetId },
+        });
+        if (asset) {
+          return asset;
+        }
+      }
+    }
+    return null;
+  }
+
+  private async findAssetFromPeers(
+    deployment: DeploymentEntity,
+  ): Promise<AssetEntity | null> {
+    for (const peer of Object.values(deployment.peers ?? {})) {
+      const chainName = this.chainNamesByEndpointId.get(peer.endpointId);
+      const oftAddress = addressFromBytes32(peer.peer);
+      if (!chainName || !oftAddress) {
+        continue;
+      }
+      const remote = await this.deploymentRepository.findOne({
+        where: { chainName, oftAddress },
+      });
+      if (remote) {
+        return this.assetRepository.findOne({ where: { id: remote.assetId } });
+      }
+    }
+    return null;
+  }
+
+  private appendDiscoveryEvidence(
+    evidence: DeploymentEvidence,
+    source: DiscoveryEvidence,
+  ): DeploymentEvidence {
+    const sources = [...(evidence.discoverySources ?? [])];
+    const duplicate = sources.some(
+      (item) =>
+        (source.guid && item.guid === source.guid) ||
+        (source.transactionHash &&
+          item.transactionHash === source.transactionHash),
+    );
+    if (!duplicate) {
+      sources.push(source);
+    }
+    return {
+      ...evidence,
+      discoverySources: sources.slice(-10),
+    };
+  }
+
   private isMetadataEntry(value: unknown): value is OftMetadataEntry {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       return false;
@@ -339,6 +835,32 @@ export class ScanService {
     symbol: string,
     entry: OftMetadataEntry,
   ): Promise<AssetEntity> {
+    for (const [rawChainName, deployment] of Object.entries(
+      entry.deployments,
+    )) {
+      if (!this.isMetadataDeployment(deployment)) {
+        continue;
+      }
+      const chainName = rawChainName.toLowerCase();
+      const oftAddress = normalizeEvmAddress(deployment.address);
+      if (!this.scanChains[chainName] || !oftAddress) {
+        continue;
+      }
+      const existingDeployment = await this.deploymentRepository.findOne({
+        where: { chainName, oftAddress },
+      });
+      if (existingDeployment) {
+        const discoveredAsset = await this.assetRepository.findOne({
+          where: { id: existingDeployment.assetId },
+        });
+        if (discoveredAsset) {
+          discoveredAsset.name = entry.name;
+          discoveredAsset.symbol = symbol;
+          return this.assetRepository.save(discoveredAsset);
+        }
+      }
+    }
+
     const sourceKey = [
       symbol.toLowerCase(),
       entry.name.toLowerCase(),
@@ -469,12 +991,14 @@ export class ScanService {
   private async probeDeployment(
     deployment: DeploymentEntity,
     chainConf: OftChainConfig,
+    prefetchedProbe?: OftContractProbe,
   ): Promise<void> {
     const client = this.contractClients[deployment.chainName];
     if (!client) {
       throw new Error(`RPC_NOT_CONFIGURED:${deployment.chainName}`);
     }
-    const probe = await client.probe(deployment.oftAddress);
+    const probe =
+      prefetchedProbe ?? (await client.probe(deployment.oftAddress));
     if (probe.oftVersion.interfaceId.toLowerCase() !== OFT_INTERFACE_ID) {
       throw new Error(
         `UNSUPPORTED_OFT_INTERFACE:${probe.oftVersion.interfaceId}`,
@@ -626,6 +1150,7 @@ export class ScanService {
     for (const deployment of deployments) {
       if (
         !this.scanChains[deployment.chainName] ||
+        !deployment.evidence?.metadataHash ||
         seenDeployments.has(
           this.deploymentKey(deployment.chainName, deployment.oftAddress),
         )

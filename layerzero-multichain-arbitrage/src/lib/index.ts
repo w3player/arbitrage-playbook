@@ -9,3 +9,9 @@ export type {
   OftContractProbe,
   OftPeerResult,
 } from './oft-contract.client';
+export { LayerZeroScanClient } from './layerzero-scan.client';
+export type {
+  LayerZeroScanMessage,
+  LayerZeroScanPage,
+  LayerZeroScanPageRequest,
+} from './layerzero-scan.client';

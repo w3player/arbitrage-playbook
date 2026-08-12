@@ -19,15 +19,26 @@ export interface PeerSnapshot {
   status: 'active' | 'one_way' | 'unknown';
 }
 
+export interface DiscoveryEvidence {
+  source: 'layerzero_scan_message';
+  url: string;
+  observedAt: string;
+  guid?: string;
+  transactionHash?: string;
+  sourceEndpointId: number;
+  destinationEndpointId: number;
+}
+
 export interface DeploymentEvidence {
-  metadataUrl: string;
-  metadataType: string;
-  metadata: Record<string, unknown>;
+  metadataUrl?: string;
+  metadataType?: string;
+  metadata?: Record<string, unknown>;
   metadataHash?: string;
   metadataMissingCount?: number;
   lastMetadataSeenAt?: string;
   blockNumber?: string;
   oftVersion?: { interfaceId: string; version: string };
+  discoverySources?: DiscoveryEvidence[];
 }
 
 @Entity({ name: 'deployments' })
