@@ -16,6 +16,7 @@ import {
   DeploymentEntity,
   DeploymentEvidence,
 } from '../database/entities/deployment.entity';
+import type { ScanStatusResponseDto, ScanSummaryDto } from '../dto/scan.dto';
 import {
   OFT_INTERFACE_ID,
   OftContractClient,
@@ -43,16 +44,6 @@ interface OftMetadataEntry {
 
 type OftMetadataResponse = Record<string, OftMetadataEntry[]>;
 
-export interface ScanSummary {
-  assets: number;
-  deployments: number;
-  verified: number;
-  rejected: number;
-  failed: number;
-  unchanged: number;
-  skipped: number;
-}
-
 export function classifyStandardOft(
   oftAddress: string,
   tokenAddress: string,
@@ -71,7 +62,14 @@ export class ScanService {
   private readonly metadataUrl: string;
   private readonly scanChains: ScanChainsConf;
   private readonly contractClients: Record<string, OftContractClient>;
-  private activeScan: Promise<ScanSummary> | null = null;
+  private activeScan: Promise<ScanSummaryDto> | null = null;
+  private scanStatus: ScanStatusResponseDto = {
+    state: 'idle',
+    startedAt: null,
+    completedAt: null,
+    summary: null,
+    error: null,
+  };
 
   constructor(
     @InjectRepository(AssetEntity)
@@ -109,7 +107,14 @@ export class ScanService {
     return true;
   }
 
-  scan(): Promise<ScanSummary> {
+  getStatus(): ScanStatusResponseDto {
+    return {
+      ...this.scanStatus,
+      summary: this.scanStatus.summary ? { ...this.scanStatus.summary } : null,
+    };
+  }
+
+  scan(): Promise<ScanSummaryDto> {
     if (this.activeScan) {
       this.logger.log('OFT scan request joined the active scan');
       return this.activeScan;
@@ -119,10 +124,35 @@ export class ScanService {
     this.logger.log(
       `OFT scan started: chains=${Object.keys(this.scanChains).join(',')}`,
     );
+    this.scanStatus = {
+      state: 'running',
+      startedAt: new Date(startedAt).toISOString(),
+      completedAt: null,
+      summary: this.scanStatus.summary,
+      error: null,
+    };
     this.activeScan = this.executeScan(startedAt)
+      .then((summary) => {
+        this.scanStatus = {
+          state: 'idle',
+          startedAt: this.scanStatus.startedAt,
+          completedAt: new Date().toISOString(),
+          summary,
+          error: null,
+        };
+        return summary;
+      })
       .catch((error: unknown) => {
+        const message = this.errorMessage(error);
+        this.scanStatus = {
+          state: 'failed',
+          startedAt: this.scanStatus.startedAt,
+          completedAt: new Date().toISOString(),
+          summary: this.scanStatus.summary,
+          error: message,
+        };
         this.logger.error(
-          `OFT scan aborted after ${Date.now() - startedAt}ms: ${this.errorMessage(error)}`,
+          `OFT scan aborted after ${Date.now() - startedAt}ms: ${message}`,
         );
         throw error;
       })
@@ -133,14 +163,14 @@ export class ScanService {
     return this.activeScan;
   }
 
-  private async executeScan(startedAt: number): Promise<ScanSummary> {
+  private async executeScan(startedAt: number): Promise<ScanSummaryDto> {
     const metadataStartedAt = Date.now();
     const metadata = await this.fetchMetadata();
     const targetDeploymentCount = this.countTargetDeployments(metadata);
     this.logger.log(
       `LayerZero metadata loaded: symbols=${Object.keys(metadata).length}, targetDeployments=${targetDeploymentCount}, durationMs=${Date.now() - metadataStartedAt}`,
     );
-    const summary: ScanSummary = {
+    const summary: ScanSummaryDto = {
       assets: 0,
       deployments: 0,
       verified: 0,
