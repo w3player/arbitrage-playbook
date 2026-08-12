@@ -44,6 +44,8 @@ export function SpotPriceMonitor() {
         ),
     );
   }, [data?.assets, query]);
+  const comparableAssets = useMemo(() => assets.filter((asset) => asset.comparableChains >= 2), [assets]);
+  const incomparableAssets = useMemo(() => assets.filter((asset) => asset.comparableChains < 2), [assets]);
 
   return (
     <div className="mx-auto w-full max-w-[110rem] px-5 py-4">
@@ -115,10 +117,10 @@ export function SpotPriceMonitor() {
       <section className="mt-3 overflow-hidden rounded-lg border bg-card" aria-labelledby="spot-table-title">
         <div className="flex h-10 items-center justify-between gap-4 border-b px-3">
           <h2 className="text-sm font-semibold" id="spot-table-title">
-            多链 DEX 市场快照
+            可比较的多链市场
           </h2>
           <p className="font-mono text-[10px] text-muted-foreground">
-            显示 {assets.length} / {data?.assets.length ?? 0}
+            显示 {comparableAssets.length} / {data?.summary.comparableAssets ?? 0}
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -135,17 +137,17 @@ export function SpotPriceMonitor() {
             </thead>
             <tbody className="divide-y">
               {loading && !data ? <LoadingRows columns={6} /> : null}
-              {!loading && !error && assets.length === 0 ? (
+              {!loading && !error && comparableAssets.length === 0 ? (
                 <tr>
                   <td
                     className="h-36 text-center text-xs text-muted-foreground"
                     colSpan={(data?.chains.length ?? 3) + 3}
                   >
-                    没有可展示的多链池价。
+                    没有满足两条有效市场的资产。
                   </td>
                 </tr>
               ) : null}
-              {assets.map((asset) => (
+              {comparableAssets.map((asset) => (
                 <AssetRow
                   asset={asset}
                   chains={data?.chains.map((chain) => chain.chainName) ?? []}
@@ -156,6 +158,39 @@ export function SpotPriceMonitor() {
           </table>
         </div>
       </section>
+
+      {incomparableAssets.length > 0 ? (
+        <details className="mt-3 overflow-hidden rounded-lg border bg-card">
+          <summary className="flex min-h-10 cursor-pointer items-center gap-2 px-3 text-xs font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/30">
+            <AlertTriangle className="size-3.5 text-amber-600" aria-hidden="true" />
+            不可比较资产 {incomparableAssets.length} 个
+            <span className="text-[10px] font-normal text-muted-foreground">少于两条流动性达到 $10,000 的市场</span>
+          </summary>
+          <div className="overflow-x-auto border-t">
+            <table className="w-full min-w-[1180px] border-collapse text-left text-xs">
+              <thead className="bg-muted/60 text-[10px] text-muted-foreground">
+                <tr>
+                  <Header>资产</Header>
+                  {(data?.chains ?? []).map((chain) => (
+                    <Header key={chain.chainName}>{chainName(chain.chainName)}</Header>
+                  ))}
+                  <Header>比较状态</Header>
+                  <Header>价格偏离</Header>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {incomparableAssets.map((asset) => (
+                  <AssetRow
+                    asset={asset}
+                    chains={data?.chains.map((chain) => chain.chainName) ?? []}
+                    key={asset.assetId}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      ) : null}
 
       <p className="mt-2 text-[10px] leading-4 text-muted-foreground">
         价格偏离仅使用流动性不少于 $10,000 的市场计算；尚未计入下单量造成的滑点、Gas、跨链费和跨链等待期间的波动。
@@ -168,7 +203,14 @@ function AssetRow({ asset, chains }: { asset: SpotAssetPrice; chains: string[] }
   return (
     <tr className="align-top transition-colors hover:bg-muted/35">
       <td className="px-3 py-2.5">
-        <div className="font-mono text-sm font-semibold">{asset.symbol}</div>
+        <div className="flex items-center gap-1.5">
+          <span className="font-mono text-sm font-semibold">{asset.symbol}</span>
+          {asset.comparableChains < 2 ? (
+            <span className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold text-amber-800">
+              不可比较
+            </span>
+          ) : null}
+        </div>
         <div className="mt-0.5 max-w-44 truncate text-[10px] text-muted-foreground" title={asset.name}>
           {asset.name}
         </div>
@@ -192,7 +234,7 @@ function AssetRow({ asset, chains }: { asset: SpotAssetPrice; chains: string[] }
             </div>
           </>
         ) : (
-          <span className="text-[10px] text-muted-foreground">不足两条链</span>
+          <span className="text-[10px] font-medium text-amber-700">不足两条有效市场</span>
         )}
       </td>
       <td className="px-3 py-2.5 font-mono tabular-nums">
