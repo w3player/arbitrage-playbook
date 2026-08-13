@@ -1,7 +1,7 @@
 packages:
   - 'lifi'
   - 'layerzero-multichain-arbitrage'
-  - 'layerzero-multichain-arbitrage/web'
+  - 'web'
 
 catalog:
   vite: ^8.2.0

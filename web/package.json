@@ -1,5 +1,5 @@
 {
-  "name": "@arbitrage-playbook/layerzero-multichain-arbitrage-web",
+  "name": "@arbitrage-playbook/web",
   "private": true,
   "version": "0.0.0",
   "type": "module",

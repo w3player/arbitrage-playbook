@@ -1,18 +1,17 @@
-import { Orbit, Radio } from 'lucide-react';
+import { LayoutGrid, Orbit, Radio } from 'lucide-react';
 import { useEffect } from 'react';
 import { Navigate, NavLink, Outlet, Route, Routes, useLocation } from 'react-router';
 
 import { getNavigationItem, navigationItems } from '@/app/navigation';
 import type { NavigationItem } from '@/app/navigation';
+import { ScannerProvider } from '@/features/scanner/scanner-provider';
 import { useScanner } from '@/features/scanner/scanner-provider';
 import { StatusBadge } from '@/features/scanner/status-badge';
 import { formatDateTime } from '@/lib/format';
-import { AssetsPage } from '@/pages/assets-page';
-import { ExecutionPage } from '@/pages/execution-page';
-import { PriceScanPage } from '@/pages/price-scan-page';
-import { SpotPricePage } from '@/pages/spot-price-page';
+import { HomePage, ScenarioPage } from '@/pages/hub';
+import { AssetsPage, ExecutionPage, PriceScanPage, SpotPricePage } from '@/pages/scenarios/layerzero';
 
-function RootLayout() {
+function LayerZeroLayout() {
   const location = useLocation();
   const { assets, scanStatus } = useScanner();
   const pageTitle = getNavigationItem(location.pathname)?.label ?? '资产管理';
@@ -32,7 +31,14 @@ function RootLayout() {
 
       <aside className="sticky top-0 flex h-dvh flex-col border-r bg-card">
         <Brand />
-        <nav className="flex-1 overflow-y-auto px-2 py-3" aria-label="主导航">
+        <nav className="flex-1 overflow-y-auto px-2 py-3" aria-label="LayerZero 场景导航">
+          <NavLink
+            className="mb-3 flex min-h-9 items-center gap-2 rounded-md border px-2.5 text-[11px] font-medium text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+            to="/"
+          >
+            <LayoutGrid className="size-3.5" aria-hidden="true" />
+            所有套利场景
+          </NavLink>
           <div className="space-y-1">
             {navigationItems.map((item) => (
               <NavigationLink key={item.to} item={item} />
@@ -93,8 +99,8 @@ function Brand() {
         <Orbit className="size-4" aria-hidden="true" />
       </span>
       <span className="min-w-0">
-        <span className="block truncate text-[13px] font-semibold tracking-tight">L0 Arbitrage</span>
-        <span className="block text-[9px] text-muted-foreground">Assets · Prices · Execution</span>
+        <span className="block truncate text-[13px] font-semibold tracking-tight">LayerZero 套利</span>
+        <span className="block text-[9px] text-muted-foreground">Arbitrage Playbook · Scenario</span>
       </span>
     </NavLink>
   );
@@ -122,14 +128,23 @@ function NavigationLink({ item }: { item: NavigationItem }) {
 export function AppRoutes() {
   return (
     <Routes>
-      <Route element={<RootLayout />}>
-        <Route index element={<Navigate replace to="/assets" />} />
+      <Route element={<HomePage />} index />
+      <Route element={<ScenarioPage />} path="scenarios/:scenarioId" />
+      <Route
+        element={
+          <ScannerProvider>
+            <LayerZeroLayout />
+          </ScannerProvider>
+        }
+        path="layerzero"
+      >
+        <Route index element={<Navigate replace to="/layerzero/assets" />} />
         <Route element={<AssetsPage />} path="assets" />
         <Route element={<SpotPricePage />} path="market-prices" />
         <Route element={<PriceScanPage />} path="prices" />
         <Route element={<ExecutionPage />} path="execution" />
-        <Route path="*" element={<Navigate replace to="/assets" />} />
       </Route>
+      <Route path="*" element={<Navigate replace to="/" />} />
     </Routes>
   );
 }

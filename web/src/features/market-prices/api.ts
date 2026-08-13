@@ -1,7 +1,7 @@
 import type { SpotPricesResponse } from './types';
 
 export async function getSpotPrices(): Promise<SpotPricesResponse> {
-  const response = await fetch('/api/spot-prices', {
+  const response = await fetch('/api/layerzero/spot-prices', {
     headers: { accept: 'application/json' },
   });
   if (!response.ok) {

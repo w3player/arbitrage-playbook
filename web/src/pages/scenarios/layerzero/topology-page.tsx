@@ -50,7 +50,7 @@ export function TopologyPage() {
         </div>
         <Link
           className="inline-flex min-h-11 w-fit items-center gap-2 rounded-lg border px-3 text-sm font-medium outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
-          to="/assets"
+          to="/layerzero/assets"
         >
           返回资产目录 <ArrowRight className="size-4" aria-hidden="true" />
         </Link>

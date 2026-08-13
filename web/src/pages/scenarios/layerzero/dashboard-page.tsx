@@ -99,7 +99,7 @@ export function DashboardPage() {
               </div>
               <Link
                 className="rounded-md px-3 py-2 text-sm font-medium text-primary outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
-                to="/assets"
+                to="/layerzero/assets"
               >
                 查看全部
               </Link>
@@ -143,12 +143,12 @@ export function DashboardPage() {
               </div>
               <p className="mt-2 text-xs leading-5 text-muted-foreground">严格按 plan.md 的数据门槛逐层开放。</p>
               <ol className="mt-5 space-y-2 text-sm">
-                <PipelineStep label="资产发现" stage="P1" state="active" to="/assets" />
-                <PipelineStep label="链上验证" stage="P2" state="next" to="/topology" />
-                <PipelineStep label="市场数据" stage="P3" state="locked" to="/markets" />
-                <PipelineStep label="机会决策" stage="P3" state="locked" to="/opportunities" />
-                <PipelineStep label="库存与执行" stage="P4+" state="locked" to="/executions" />
-                <PipelineStep label="风控与审计" stage="全程" state="guarded" to="/risk" />
+                <PipelineStep label="资产发现" stage="P1" state="active" to="/layerzero/assets" />
+                <PipelineStep label="链上验证" stage="P2" state="next" to="/layerzero/assets" />
+                <PipelineStep label="市场数据" stage="P3" state="locked" to="/layerzero/market-prices" />
+                <PipelineStep label="机会决策" stage="P3" state="locked" to="/layerzero/prices" />
+                <PipelineStep label="库存与执行" stage="P4+" state="locked" to="/layerzero/execution" />
+                <PipelineStep label="风控与审计" stage="全程" state="guarded" to="/layerzero/execution" />
               </ol>
             </section>
           </div>

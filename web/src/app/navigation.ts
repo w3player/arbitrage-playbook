@@ -11,25 +11,25 @@ export interface NavigationItem {
 
 export const navigationItems: NavigationItem[] = [
   {
-    to: '/assets',
+    to: '/layerzero/assets',
     label: '资产管理',
     description: '发现与验证跨链资产',
     icon: Boxes,
   },
   {
-    to: '/market-prices',
+    to: '/layerzero/market-prices',
     label: '全链现价',
     description: '比较各链 DEX 池价',
     icon: ScanLine,
   },
   {
-    to: '/prices',
+    to: '/layerzero/prices',
     label: '价差扫描',
     description: 'LI.FI 可执行报价比较',
     icon: ChartNoAxesCombined,
   },
   {
-    to: '/execution',
+    to: '/layerzero/execution',
     label: '执行',
     description: '提交与跟踪套利任务',
     icon: CircleDollarSign,

@@ -11,7 +11,8 @@
     "format": "vp fmt . --write",
     "format:check": "vp fmt . --check",
     "lifi": "pnpm --filter @arbitrage-playbook/lifi",
-    "lma": "pnpm --filter @arbitrage-playbook/layerzero-multichain-arbitrage"
+    "lma": "pnpm --filter @arbitrage-playbook/layerzero-multichain-arbitrage",
+    "web": "pnpm --filter @arbitrage-playbook/web"
   },
   "devDependencies": {
     "vite-plus": "0.2.6"

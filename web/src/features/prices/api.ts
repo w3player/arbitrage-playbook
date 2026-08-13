@@ -1,7 +1,7 @@
 import type { PricesResponse, PriceScanStatus, PriceScanTrigger } from './types';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`/api${path}`, {
+  const response = await fetch(`/api/layerzero${path}`, {
     headers: { accept: 'application/json' },
     ...init,
   });
