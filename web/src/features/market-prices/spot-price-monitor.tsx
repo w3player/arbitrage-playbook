@@ -1,7 +1,9 @@
-import { AlertTriangle, ArrowRight, ExternalLink, RefreshCw, Search } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, ArrowRight, Calculator, CircleDashed, ExternalLink, RefreshCw, Search, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { getPrices, getPriceScanStatus, triggerPriceScan } from '@/features/prices/api';
+import type { PricesResponse, PriceScanStatus } from '@/features/prices/types';
 import { CopyAddress } from '@/features/scanner/copy-address';
 import { chainLabels, formatDateTime } from '@/lib/format';
 
@@ -12,6 +14,13 @@ export function SpotPriceMonitor() {
   const [data, setData] = useState<SpotPricesResponse | null>(null);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [measuringAssetId, setMeasuringAssetId] = useState<number | null>(null);
+  const [measurementAsset, setMeasurementAsset] = useState<SpotAssetPrice | null>(null);
+  const [measurementOpen, setMeasurementOpen] = useState(false);
+  const [measurementRunId, setMeasurementRunId] = useState<string | null>(null);
+  const [measurementStatus, setMeasurementStatus] = useState<PriceScanStatus | null>(null);
+  const [measurementPrices, setMeasurementPrices] = useState<PricesResponse | null>(null);
+  const [measurementError, setMeasurementError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -46,6 +55,76 @@ export function SpotPriceMonitor() {
   }, [data?.assets, query]);
   const comparableAssets = useMemo(() => assets.filter((asset) => asset.comparableChains >= 2), [assets]);
   const incomparableAssets = useMemo(() => assets.filter((asset) => asset.comparableChains < 2), [assets]);
+  const closeMeasurement = useCallback(() => setMeasurementOpen(false), []);
+
+  async function handleMeasure(asset: SpotAssetPrice) {
+    if (measuringAssetId === asset.assetId) {
+      setMeasurementOpen(true);
+      return;
+    }
+
+    setMeasuringAssetId(asset.assetId);
+    setMeasurementAsset(asset);
+    setMeasurementOpen(true);
+    setMeasurementRunId(null);
+    setMeasurementStatus(null);
+    setMeasurementPrices(null);
+    setMeasurementError(null);
+    try {
+      const result = await triggerPriceScan(asset.assetId);
+      if (result.status === 'already_running') {
+        setMeasurementError('已有真实测算正在运行，请等待完成后再测算这个资产。');
+        setMeasuringAssetId(null);
+        return;
+      }
+      if (!result.runId) {
+        throw new Error('测算已启动，但服务未返回任务编号。');
+      }
+      setMeasurementRunId(result.runId);
+    } catch (requestError) {
+      setMeasurementError(requestError instanceof Error ? requestError.message : String(requestError));
+      setMeasuringAssetId(null);
+    }
+  }
+
+  useEffect(() => {
+    if (!measurementRunId) return;
+
+    let cancelled = false;
+    let timer: number | undefined;
+
+    async function pollMeasurement() {
+      try {
+        const nextStatus = await getPriceScanStatus();
+        if (cancelled) return;
+        if (nextStatus.runId !== measurementRunId) {
+          throw new Error('测算任务状态已被另一任务替代，请重新测算。');
+        }
+        setMeasurementStatus(nextStatus);
+        if (nextStatus.state === 'running') {
+          timer = window.setTimeout(() => void pollMeasurement(), 1_500);
+          return;
+        }
+        if (nextStatus.state === 'failed') {
+          setMeasurementError(nextStatus.error ?? '真实测算失败。');
+        } else {
+          const prices = await getPrices();
+          if (!cancelled) setMeasurementPrices(prices);
+        }
+        if (!cancelled) setMeasuringAssetId(null);
+      } catch (requestError) {
+        if (cancelled) return;
+        setMeasurementError(requestError instanceof Error ? requestError.message : String(requestError));
+        setMeasuringAssetId(null);
+      }
+    }
+
+    void pollMeasurement();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [measurementRunId]);
 
   return (
     <div className="mx-auto w-full max-w-[110rem] px-5 py-4">
@@ -133,6 +212,7 @@ export function SpotPriceMonitor() {
                 ))}
                 <Header>最低 → 最高</Header>
                 <Header>价格偏离</Header>
+                <Header>可成交验证</Header>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -141,7 +221,7 @@ export function SpotPriceMonitor() {
                 <tr>
                   <td
                     className="h-36 text-center text-xs text-muted-foreground"
-                    colSpan={(data?.chains.length ?? 3) + 3}
+                    colSpan={(data?.chains.length ?? 3) + 4}
                   >
                     没有满足两条有效市场的资产。
                   </td>
@@ -151,6 +231,8 @@ export function SpotPriceMonitor() {
                 <AssetRow
                   asset={asset}
                   chains={data?.chains.map((chain) => chain.chainName) ?? []}
+                  measuringAssetId={measuringAssetId}
+                  onMeasure={handleMeasure}
                   key={asset.assetId}
                 />
               ))}
@@ -176,6 +258,7 @@ export function SpotPriceMonitor() {
                   ))}
                   <Header>比较状态</Header>
                   <Header>价格偏离</Header>
+                  <Header>可成交验证</Header>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -183,6 +266,8 @@ export function SpotPriceMonitor() {
                   <AssetRow
                     asset={asset}
                     chains={data?.chains.map((chain) => chain.chainName) ?? []}
+                    measuringAssetId={measuringAssetId}
+                    onMeasure={handleMeasure}
                     key={asset.assetId}
                   />
                 ))}
@@ -195,11 +280,35 @@ export function SpotPriceMonitor() {
       <p className="mt-2 text-[10px] leading-4 text-muted-foreground">
         价格偏离仅使用流动性不少于 $10,000 的市场计算；尚未计入下单量造成的滑点、Gas、跨链费和跨链等待期间的波动。
       </p>
+
+      {measurementOpen && measurementAsset ? (
+        <MeasurementDialog
+          asset={measurementAsset}
+          error={measurementError}
+          onClose={closeMeasurement}
+          prices={measurementPrices}
+          runId={measurementRunId}
+          status={measurementStatus}
+        />
+      ) : null}
     </div>
   );
 }
 
-function AssetRow({ asset, chains }: { asset: SpotAssetPrice; chains: string[] }) {
+function AssetRow({
+  asset,
+  chains,
+  measuringAssetId,
+  onMeasure,
+}: {
+  asset: SpotAssetPrice;
+  chains: string[];
+  measuringAssetId: number | null;
+  onMeasure: (asset: SpotAssetPrice) => Promise<void>;
+}) {
+  const measuring = measuringAssetId === asset.assetId;
+  const measurable = asset.comparableChains >= 2 && asset.spreadPct !== null;
+
   return (
     <tr className="align-top transition-colors hover:bg-muted/35">
       <td className="px-3 py-2.5">
@@ -247,7 +356,231 @@ function AssetRow({ asset, chains }: { asset: SpotAssetPrice; chains: string[] }
           </>
         )}
       </td>
+      <td className="px-3 py-2.5">
+        <Button
+          aria-label={`真实测算 ${asset.symbol} 的可成交价差`}
+          className="h-8 px-2.5 text-xs"
+          disabled={!measurable || (measuringAssetId !== null && !measuring)}
+          onClick={() => void onMeasure(asset)}
+          title={measurable ? '查询约 $500 档 LI.FI 可成交报价，不会发起交易' : '至少需要两条可比较市场'}
+          type="button"
+          variant="outline"
+        >
+          <Calculator className={measuring ? 'animate-pulse' : undefined} data-icon="inline-start" />
+          {measuring ? '查看测算' : '真实测算'}
+        </Button>
+        <div className="mt-1 text-[9px] text-muted-foreground">约 $500 · 含 Gas 与额外费</div>
+      </td>
     </tr>
+  );
+}
+
+function MeasurementDialog({
+  asset,
+  error,
+  onClose,
+  prices,
+  runId,
+  status,
+}: {
+  asset: SpotAssetPrice;
+  error: string | null;
+  onClose: () => void;
+  prices: PricesResponse | null;
+  runId: string | null;
+  status: PriceScanStatus | null;
+}) {
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const running = !error && !(status?.state === 'idle' && prices !== null);
+  const runPrices = prices?.summary.runId === runId ? prices : null;
+  const spreads = runPrices?.spreads.filter((spread) => spread.assetId === asset.assetId) ?? [];
+  const failures = runPrices?.failures.filter((failure) => failure.assetId === asset.assetId) ?? [];
+  const progress = status?.summary?.assets
+    ? Math.min(100, (status.summary.completedAssets / status.summary.assets) * 100)
+    : 0;
+
+  useEffect(() => {
+    closeButton.current?.focus();
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-6 backdrop-blur-[2px]"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        aria-describedby="measurement-dialog-description"
+        aria-labelledby="measurement-dialog-title"
+        aria-modal="true"
+        className="w-full max-w-3xl overflow-hidden rounded-xl border bg-card shadow-2xl"
+        role="dialog"
+      >
+        <div className="flex items-start justify-between gap-5 border-b px-5 py-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary">
+                <Calculator className="size-4" aria-hidden="true" />
+              </span>
+              <div>
+                <h2 className="text-base font-semibold" id="measurement-dialog-title">
+                  {asset.symbol} 真实价差测算
+                </h2>
+                <p className="mt-0.5 text-[11px] text-muted-foreground" id="measurement-dialog-description">
+                  LI.FI 约 $500 档可成交报价 · 相同 Token 数量双向比较
+                </p>
+              </div>
+            </div>
+          </div>
+          <Button aria-label="关闭真实测算弹层" onClick={onClose} ref={closeButton} size="icon-sm" variant="ghost">
+            <X aria-hidden="true" />
+          </Button>
+        </div>
+
+        <div className="max-h-[70dvh] overflow-y-auto px-5 py-4">
+          <div className="grid grid-cols-3 divide-x rounded-lg border bg-muted/25">
+            <DialogMetric label="池价偏离" value={asset.spreadPct === null ? '—' : formatPercent(asset.spreadPct)} />
+            <DialogMetric label="可比链" value={`${asset.comparableChains} 条`} />
+            <DialogMetric
+              label="测算状态"
+              tone={error ? 'text-red-700' : running ? 'text-blue-700' : 'text-emerald-700'}
+              value={
+                error ? '失败' : running ? '报价中' : spreads.length > 0 ? '已完成' : runId ? '无完整报价' : '启动中'
+              }
+            />
+          </div>
+
+          {running ? (
+            <div className="mt-4 rounded-lg border bg-background p-4" aria-live="polite">
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <span className="inline-flex items-center gap-2 font-medium">
+                  <CircleDashed className="size-4 animate-spin text-primary" aria-hidden="true" />
+                  正在查询真实可成交报价
+                </span>
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  {status?.currentAsset ?? asset.symbol} · {Math.round(progress)}%
+                </span>
+              </div>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary transition-[width] duration-200"
+                  style={{ width: `${Math.max(6, progress)}%` }}
+                />
+              </div>
+              <p className="mt-3 text-[10px] leading-4 text-muted-foreground">
+                正在分别获取各链买入最大支付与卖出最小到账，并计入 Gas 和额外费用。
+              </p>
+            </div>
+          ) : null}
+
+          {error ? (
+            <div
+              className="mt-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800"
+              role="alert"
+            >
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <div>
+                <p className="font-semibold">真实测算未完成</p>
+                <p className="mt-1 leading-5">{error}</p>
+              </div>
+            </div>
+          ) : null}
+
+          {!running && !error && runId && spreads.length === 0 ? (
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
+              <p className="font-semibold">未取得完整的双向可成交报价</p>
+              <p className="mt-1 leading-5">
+                本次完成 {status?.summary?.succeededQuotes ?? 0} 条报价、失败 {status?.summary?.failedQuotes ?? 0}{' '}
+                条；池价偏离暂时不能转化为可验证的交易价差。
+              </p>
+            </div>
+          ) : null}
+
+          {spreads.length > 0 ? (
+            <div className="mt-4 space-y-2">
+              <div className="flex items-baseline justify-between gap-3">
+                <h3 className="text-sm font-semibold">可成交测算结果</h3>
+                <span className="font-mono text-[10px] text-muted-foreground">按直接净利润降序</span>
+              </div>
+              {spreads.map((spread) => (
+                <div
+                  className="grid grid-cols-[1.3fr_1fr_1fr_1fr] gap-3 rounded-lg border bg-background p-3"
+                  key={spread.id}
+                >
+                  <div>
+                    <p className="text-[10px] text-muted-foreground">方向</p>
+                    <p className="mt-1 text-xs font-semibold">
+                      {chainName(spread.buy.chainName)} → {chainName(spread.sell.chainName)}
+                    </p>
+                    <p className="mt-1 font-mono text-[9px] text-muted-foreground">
+                      {spread.tokenAmount} {spread.symbol}
+                    </p>
+                  </div>
+                  <ResultValue label="毛价差" value={formatSignedUsd(spread.grossProfitUsd)} />
+                  <ResultValue label="Gas + 额外费" value={formatUsd(spread.directCostUsd)} />
+                  <ResultValue
+                    label="直接净价差"
+                    tone={Number(spread.directProfitUsd) > 0 ? 'text-emerald-700' : 'text-red-700'}
+                    value={`${formatSignedUsd(spread.directProfitUsd)} · ${formatSignedBps(spread.directSpreadBps)}`}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {failures.length > 0 ? (
+            <details className="mt-4 rounded-lg border bg-background">
+              <summary className="cursor-pointer px-3 py-2 text-xs font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/30">
+                报价失败 {failures.length} 条
+              </summary>
+              <div className="space-y-2 border-t p-3">
+                {failures.map((failure, index) => (
+                  <div
+                    className="grid grid-cols-[7rem_4rem_1fr] gap-3 text-[10px]"
+                    key={`${failure.deploymentId}:${failure.side}:${index}`}
+                  >
+                    <span className="font-medium">{chainName(failure.chainName)}</span>
+                    <span className="font-mono text-red-700">{failure.code}</span>
+                    <span className="text-muted-foreground">{failure.message}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          ) : null}
+        </div>
+
+        <div className="flex items-center justify-between gap-4 border-t bg-muted/25 px-5 py-3">
+          <p className="text-[10px] text-muted-foreground">仅查询报价，不签名、不授权、不会发送链上交易。</p>
+          <Button onClick={onClose} size="sm" type="button" variant="outline">
+            关闭
+          </Button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function DialogMetric({ label, tone, value }: { label: string; tone?: string; value: string }) {
+  return (
+    <div className="px-4 py-3">
+      <p className="text-[10px] text-muted-foreground">{label}</p>
+      <p className={`mt-1 font-mono text-sm font-semibold tabular-nums ${tone ?? ''}`}>{value}</p>
+    </div>
+  );
+}
+
+function ResultValue({ label, tone, value }: { label: string; tone?: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[10px] text-muted-foreground">{label}</p>
+      <p className={`mt-1 font-mono text-[11px] font-semibold tabular-nums ${tone ?? ''}`}>{value}</p>
+    </div>
   );
 }
 
@@ -358,6 +691,16 @@ function compactUsd(value: string | null): string {
 
 function formatPercent(value: number): string {
   return `${value.toLocaleString('en-US', { maximumFractionDigits: 2 })}%`;
+}
+
+function formatSignedUsd(value: string): string {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return value;
+  return `${number >= 0 ? '+' : '-'}$${Math.abs(number).toLocaleString('en-US', { maximumFractionDigits: 4 })}`;
+}
+
+function formatSignedBps(value: number): string {
+  return `${value >= 0 ? '+' : ''}${value} bps`;
 }
 
 function formatSignedPercent(value: number | null): string {

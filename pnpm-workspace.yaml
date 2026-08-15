@@ -1,6 +1,7 @@
 packages:
   - 'lifi'
   - 'layerzero-multichain-arbitrage'
+  - 'v2-pool-monitor'
   - 'web'
 
 catalog:

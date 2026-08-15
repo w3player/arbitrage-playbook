@@ -19,6 +19,7 @@ export function getPriceScanStatus(): Promise<PriceScanStatus> {
   return request<PriceScanStatus>('/price-scans/status');
 }
 
-export function triggerPriceScan(): Promise<PriceScanTrigger> {
-  return request<PriceScanTrigger>('/price-scans', { method: 'POST' });
+export function triggerPriceScan(assetId?: number): Promise<PriceScanTrigger> {
+  const query = assetId === undefined ? '' : `?assetId=${encodeURIComponent(assetId)}`;
+  return request<PriceScanTrigger>(`/price-scans${query}`, { method: 'POST' });
 }

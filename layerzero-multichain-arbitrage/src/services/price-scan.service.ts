@@ -72,12 +72,12 @@ export class PriceScanService {
     });
   }
 
-  triggerScan(): { started: boolean; runId: string | null } {
+  triggerScan(assetId?: number): { started: boolean; runId: string | null } {
     if (this.activeScan) {
       return { started: false, runId: this.status.runId };
     }
     const runId = randomUUID();
-    void this.scan(runId).catch(() => undefined);
+    void this.scan(runId, assetId).catch(() => undefined);
     return { started: true, runId };
   }
 
@@ -92,7 +92,7 @@ export class PriceScanService {
     return this.hasApiKey;
   }
 
-  scan(runId = randomUUID()): Promise<PriceScanSummaryDto> {
+  scan(runId = randomUUID(), assetId?: number): Promise<PriceScanSummaryDto> {
     if (this.activeScan) {
       return this.activeScan;
     }
@@ -109,10 +109,10 @@ export class PriceScanService {
       error: null,
     };
     this.logger.log(
-      `Cross-chain price scan started: runId=${runId}, mode=${this.hasApiKey ? 'authenticated' : 'anonymous_incremental'}`,
+      `Cross-chain price scan started: runId=${runId}, mode=${this.hasApiKey ? 'authenticated' : 'anonymous_incremental'}, target=${assetId ?? 'all'}`,
     );
 
-    this.activeScan = this.executeScan(runId)
+    this.activeScan = this.executeScan(runId, assetId)
       .then((summary) => {
         this.status = {
           ...this.status,
@@ -148,15 +148,22 @@ export class PriceScanService {
     return this.activeScan;
   }
 
-  private async executeScan(runId: string): Promise<PriceScanSummaryDto> {
+  private async executeScan(
+    runId: string,
+    assetId?: number,
+  ): Promise<PriceScanSummaryDto> {
     const allAssets = await this.assetRepository.find({
-      where: { status: AssetStatus.VERIFIED },
+      where:
+        assetId === undefined
+          ? { status: AssetStatus.VERIFIED }
+          : { id: assetId, status: AssetStatus.VERIFIED },
       relations: { deployments: true },
       order: { symbol: 'ASC' },
     });
-    const assets = this.hasApiKey
-      ? allAssets
-      : await this.selectAnonymousBatch(allAssets);
+    const assets =
+      assetId !== undefined || this.hasApiKey
+        ? allAssets
+        : await this.selectAnonymousBatch(allAssets);
     const summary: PriceScanSummaryDto = {
       assets: assets.length,
       completedAssets: 0,
