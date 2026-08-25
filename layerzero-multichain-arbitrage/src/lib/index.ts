@@ -8,6 +8,7 @@ export type {
   OftChainConfig,
   OftContractProbe,
   OftPeerResult,
+  OftTransferQuote,
 } from './oft-contract.client';
 export { LayerZeroScanClient } from './layerzero-scan.client';
 export type {

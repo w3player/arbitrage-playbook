@@ -29,6 +29,7 @@ export const AppConf = {
   },
   prices: {
     targetSettlementAmount: '500',
+    rpcSnapshotSourceGasUnits: 250_000,
     quoteValidityMs: 90_000,
     scanConcurrency: 4,
     anonymousScanConcurrency: 1,

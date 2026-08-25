@@ -2,13 +2,11 @@ import { AlertTriangle, ArrowRight, Calculator, CircleDashed, ExternalLink, Refr
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { getPrices, getPriceScanStatus, triggerPriceScan } from '@/features/prices/api';
-import type { PricesResponse, PriceScanStatus } from '@/features/prices/types';
 import { CopyAddress } from '@/features/scanner/copy-address';
 import { chainLabels, formatDateTime } from '@/lib/format';
 
-import { getSpotPrices } from './api';
-import type { SpotAssetPrice, SpotMarket, SpotPricesResponse } from './types';
+import { createRpcSnapshot, getSpotPrices } from './api';
+import type { RpcSnapshotResponse, SpotAssetPrice, SpotMarket, SpotPricesResponse } from './types';
 
 export function SpotPriceMonitor() {
   const [data, setData] = useState<SpotPricesResponse | null>(null);
@@ -17,9 +15,7 @@ export function SpotPriceMonitor() {
   const [measuringAssetId, setMeasuringAssetId] = useState<number | null>(null);
   const [measurementAsset, setMeasurementAsset] = useState<SpotAssetPrice | null>(null);
   const [measurementOpen, setMeasurementOpen] = useState(false);
-  const [measurementRunId, setMeasurementRunId] = useState<string | null>(null);
-  const [measurementStatus, setMeasurementStatus] = useState<PriceScanStatus | null>(null);
-  const [measurementPrices, setMeasurementPrices] = useState<PricesResponse | null>(null);
+  const [measurementSnapshot, setMeasurementSnapshot] = useState<RpcSnapshotResponse | null>(null);
   const [measurementError, setMeasurementError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,65 +62,25 @@ export function SpotPriceMonitor() {
     setMeasuringAssetId(asset.assetId);
     setMeasurementAsset(asset);
     setMeasurementOpen(true);
-    setMeasurementRunId(null);
-    setMeasurementStatus(null);
-    setMeasurementPrices(null);
+    setMeasurementSnapshot(null);
     setMeasurementError(null);
     try {
-      const result = await triggerPriceScan(asset.assetId);
-      if (result.status === 'already_running') {
-        setMeasurementError('已有真实测算正在运行，请等待完成后再测算这个资产。');
-        setMeasuringAssetId(null);
-        return;
+      if (!asset.lowChainName || !asset.highChainName) {
+        throw new Error('缺少可比较的低价链或高价链。');
       }
-      if (!result.runId) {
-        throw new Error('测算已启动，但服务未返回任务编号。');
-      }
-      setMeasurementRunId(result.runId);
+      setMeasurementSnapshot(
+        await createRpcSnapshot({
+          assetId: asset.assetId,
+          buyChainName: asset.lowChainName,
+          sellChainName: asset.highChainName,
+        }),
+      );
     } catch (requestError) {
       setMeasurementError(requestError instanceof Error ? requestError.message : String(requestError));
+    } finally {
       setMeasuringAssetId(null);
     }
   }
-
-  useEffect(() => {
-    if (!measurementRunId) return;
-
-    let cancelled = false;
-    let timer: number | undefined;
-
-    async function pollMeasurement() {
-      try {
-        const nextStatus = await getPriceScanStatus();
-        if (cancelled) return;
-        if (nextStatus.runId !== measurementRunId) {
-          throw new Error('测算任务状态已被另一任务替代，请重新测算。');
-        }
-        setMeasurementStatus(nextStatus);
-        if (nextStatus.state === 'running') {
-          timer = window.setTimeout(() => void pollMeasurement(), 1_500);
-          return;
-        }
-        if (nextStatus.state === 'failed') {
-          setMeasurementError(nextStatus.error ?? '真实测算失败。');
-        } else {
-          const prices = await getPrices();
-          if (!cancelled) setMeasurementPrices(prices);
-        }
-        if (!cancelled) setMeasuringAssetId(null);
-      } catch (requestError) {
-        if (cancelled) return;
-        setMeasurementError(requestError instanceof Error ? requestError.message : String(requestError));
-        setMeasuringAssetId(null);
-      }
-    }
-
-    void pollMeasurement();
-    return () => {
-      cancelled = true;
-      if (timer !== undefined) window.clearTimeout(timer);
-    };
-  }, [measurementRunId]);
 
   return (
     <div className="mx-auto w-full max-w-[110rem] px-5 py-4">
@@ -285,10 +241,9 @@ export function SpotPriceMonitor() {
         <MeasurementDialog
           asset={measurementAsset}
           error={measurementError}
+          loading={measuringAssetId === measurementAsset.assetId}
           onClose={closeMeasurement}
-          prices={measurementPrices}
-          runId={measurementRunId}
-          status={measurementStatus}
+          snapshot={measurementSnapshot}
         />
       ) : null}
     </div>
@@ -362,14 +317,14 @@ function AssetRow({
           className="h-8 px-2.5 text-xs"
           disabled={!measurable || (measuringAssetId !== null && !measuring)}
           onClick={() => void onMeasure(asset)}
-          title={measurable ? '查询约 $500 档 LI.FI 可成交报价，不会发起交易' : '至少需要两条可比较市场'}
+          title={measurable ? '低价链买入、OFT 跨链、高价链卖出的 RPC 快照，不会发起交易' : '至少需要两条可比较市场'}
           type="button"
           variant="outline"
         >
           <Calculator className={measuring ? 'animate-pulse' : undefined} data-icon="inline-start" />
-          {measuring ? '查看测算' : '真实测算'}
+          {measuring ? '查看快照' : 'RPC 快照'}
         </Button>
-        <div className="mt-1 text-[9px] text-muted-foreground">约 $500 · 含 Gas 与额外费</div>
+        <div className="mt-1 text-[9px] text-muted-foreground">约 $500 · 买入 → 跨链 → 卖出</div>
       </td>
     </tr>
   );
@@ -378,26 +333,17 @@ function AssetRow({
 function MeasurementDialog({
   asset,
   error,
+  loading,
   onClose,
-  prices,
-  runId,
-  status,
+  snapshot,
 }: {
   asset: SpotAssetPrice;
   error: string | null;
+  loading: boolean;
   onClose: () => void;
-  prices: PricesResponse | null;
-  runId: string | null;
-  status: PriceScanStatus | null;
+  snapshot: RpcSnapshotResponse | null;
 }) {
   const closeButton = useRef<HTMLButtonElement>(null);
-  const running = !error && !(status?.state === 'idle' && prices !== null);
-  const runPrices = prices?.summary.runId === runId ? prices : null;
-  const spreads = runPrices?.spreads.filter((spread) => spread.assetId === asset.assetId) ?? [];
-  const failures = runPrices?.failures.filter((failure) => failure.assetId === asset.assetId) ?? [];
-  const progress = status?.summary?.assets
-    ? Math.min(100, (status.summary.completedAssets / status.summary.assets) * 100)
-    : 0;
 
   useEffect(() => {
     closeButton.current?.focus();
@@ -430,10 +376,10 @@ function MeasurementDialog({
               </span>
               <div>
                 <h2 className="text-base font-semibold" id="measurement-dialog-title">
-                  {asset.symbol} 真实价差测算
+                  {asset.symbol} RPC 跨链快照
                 </h2>
                 <p className="mt-0.5 text-[11px] text-muted-foreground" id="measurement-dialog-description">
-                  LI.FI 约 $500 档可成交报价 · 相同 Token 数量双向比较
+                  低价链买入 → LayerZero OFT → 高价链卖出 · 约 $500 档
                 </p>
               </div>
             </div>
@@ -446,35 +392,47 @@ function MeasurementDialog({
         <div className="max-h-[70dvh] overflow-y-auto px-5 py-4">
           <div className="grid grid-cols-3 divide-x rounded-lg border bg-muted/25">
             <DialogMetric label="池价偏离" value={asset.spreadPct === null ? '—' : formatPercent(asset.spreadPct)} />
-            <DialogMetric label="可比链" value={`${asset.comparableChains} 条`} />
             <DialogMetric
-              label="测算状态"
-              tone={error ? 'text-red-700' : running ? 'text-blue-700' : 'text-emerald-700'}
+              label="快照方向"
+              value={`${chainName(asset.lowChainName ?? '—')} → ${chainName(asset.highChainName ?? '—')}`}
+            />
+            <DialogMetric
+              label="快照结果"
+              tone={
+                error
+                  ? 'text-red-700'
+                  : loading
+                    ? 'text-blue-700'
+                    : snapshot?.summary.status === 'positive'
+                      ? 'text-emerald-700'
+                      : 'text-red-700'
+              }
               value={
-                error ? '失败' : running ? '报价中' : spreads.length > 0 ? '已完成' : runId ? '无完整报价' : '启动中'
+                error
+                  ? '失败'
+                  : loading
+                    ? '测算中'
+                    : snapshot
+                      ? formatSignedUsd(snapshot.summary.netProfitUsd)
+                      : '准备中'
               }
             />
           </div>
 
-          {running ? (
+          {loading ? (
             <div className="mt-4 rounded-lg border bg-background p-4" aria-live="polite">
               <div className="flex items-center justify-between gap-3 text-xs">
                 <span className="inline-flex items-center gap-2 font-medium">
                   <CircleDashed className="size-4 animate-spin text-primary" aria-hidden="true" />
-                  正在查询真实可成交报价
+                  正在组合三段只读快照
                 </span>
-                <span className="font-mono text-[10px] text-muted-foreground">
-                  {status?.currentAsset ?? asset.symbol} · {Math.round(progress)}%
-                </span>
+                <span className="font-mono text-[10px] text-muted-foreground">LI.FI + LayerZero RPC</span>
               </div>
               <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-primary transition-[width] duration-200"
-                  style={{ width: `${Math.max(6, progress)}%` }}
-                />
+                <div className="h-full w-2/3 animate-pulse rounded-full bg-primary" />
               </div>
               <p className="mt-3 text-[10px] leading-4 text-muted-foreground">
-                正在分别获取各链买入最大支付与卖出最小到账，并计入 Gas 和额外费用。
+                正在查询低价链买入、OFT 实际到账与消息费，再以到账数量查询高价链最低卖出收入。
               </p>
             </div>
           ) : null}
@@ -486,82 +444,130 @@ function MeasurementDialog({
             >
               <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
               <div>
-                <p className="font-semibold">真实测算未完成</p>
+                <p className="font-semibold">RPC 快照未完成</p>
                 <p className="mt-1 leading-5">{error}</p>
               </div>
             </div>
           ) : null}
 
-          {!running && !error && runId && spreads.length === 0 ? (
-            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
-              <p className="font-semibold">未取得完整的双向可成交报价</p>
-              <p className="mt-1 leading-5">
-                本次完成 {status?.summary?.succeededQuotes ?? 0} 条报价、失败 {status?.summary?.failedQuotes ?? 0}{' '}
-                条；池价偏离暂时不能转化为可验证的交易价差。
-              </p>
-            </div>
-          ) : null}
-
-          {spreads.length > 0 ? (
-            <div className="mt-4 space-y-2">
-              <div className="flex items-baseline justify-between gap-3">
-                <h3 className="text-sm font-semibold">可成交测算结果</h3>
-                <span className="font-mono text-[10px] text-muted-foreground">按直接净利润降序</span>
+          {snapshot ? (
+            <>
+              <div className="mt-4 grid grid-cols-[1fr_auto_1fr_auto_1fr] items-stretch gap-2">
+                <SnapshotStep
+                  detail={`${snapshot.buy.tokenAmount} ${snapshot.symbol}`}
+                  label="低价链买入"
+                  meta={`${snapshot.buy.tool} · Gas ${formatUsd(snapshot.buy.gasUsd)}`}
+                  title={chainName(snapshot.buy.chainName)}
+                  value={`${formatUsd(snapshot.buy.settlementAmountUsd)} ${snapshot.buy.settlementSymbol}`}
+                />
+                <ArrowRight className="mt-12 size-4 text-muted-foreground" aria-hidden="true" />
+                <SnapshotStep
+                  detail={`到账 ${snapshot.bridge.receivedAmount} ${snapshot.symbol}`}
+                  label="LayerZero OFT"
+                  meta={`区块 ${snapshot.bridge.sourceBlockNumber} · 损耗 ${formatSignedBps(-snapshot.bridge.tokenLossBps)}`}
+                  title={`${chainName(snapshot.bridge.sourceChainName)} → ${chainName(snapshot.bridge.destinationChainName)}`}
+                  value={`消息费 ${formatUsd(snapshot.bridge.nativeFeeUsd)}`}
+                />
+                <ArrowRight className="mt-12 size-4 text-muted-foreground" aria-hidden="true" />
+                <SnapshotStep
+                  detail={`${snapshot.sell.tokenAmount} ${snapshot.symbol}`}
+                  label="高价链卖出"
+                  meta={`${snapshot.sell.tool} · Gas ${formatUsd(snapshot.sell.gasUsd)}`}
+                  title={chainName(snapshot.sell.chainName)}
+                  value={`${formatUsd(snapshot.sell.settlementAmountUsd)} ${snapshot.sell.settlementSymbol}`}
+                />
               </div>
-              {spreads.map((spread) => (
-                <div
-                  className="grid grid-cols-[1.3fr_1fr_1fr_1fr] gap-3 rounded-lg border bg-background p-3"
-                  key={spread.id}
-                >
-                  <div>
-                    <p className="text-[10px] text-muted-foreground">方向</p>
-                    <p className="mt-1 text-xs font-semibold">
-                      {chainName(spread.buy.chainName)} → {chainName(spread.sell.chainName)}
-                    </p>
-                    <p className="mt-1 font-mono text-[9px] text-muted-foreground">
-                      {spread.tokenAmount} {spread.symbol}
-                    </p>
-                  </div>
-                  <ResultValue label="毛价差" value={formatSignedUsd(spread.grossProfitUsd)} />
-                  <ResultValue label="Gas + 额外费" value={formatUsd(spread.directCostUsd)} />
-                  <ResultValue
-                    label="直接净价差"
-                    tone={Number(spread.directProfitUsd) > 0 ? 'text-emerald-700' : 'text-red-700'}
-                    value={`${formatSignedUsd(spread.directProfitUsd)} · ${formatSignedBps(spread.directSpreadBps)}`}
-                  />
+
+              <div className="mt-4 overflow-hidden rounded-lg border bg-background">
+                <div className="grid grid-cols-4 divide-x border-b bg-muted/30">
+                  <ResultValue label="投入" value={formatUsd(snapshot.summary.inputUsd)} />
+                  <ResultValue label="跨链后卖出" value={formatUsd(snapshot.summary.outputUsd)} />
+                  <ResultValue label="显式成本" value={formatUsd(snapshot.summary.explicitCostUsd)} />
+                  <ResultValue label="到账前毛差" value={formatSignedUsd(snapshot.summary.grossProfitUsd)} />
                 </div>
-              ))}
-            </div>
-          ) : null}
-
-          {failures.length > 0 ? (
-            <details className="mt-4 rounded-lg border bg-background">
-              <summary className="cursor-pointer px-3 py-2 text-xs font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/30">
-                报价失败 {failures.length} 条
-              </summary>
-              <div className="space-y-2 border-t p-3">
-                {failures.map((failure, index) => (
-                  <div
-                    className="grid grid-cols-[7rem_4rem_1fr] gap-3 text-[10px]"
-                    key={`${failure.deploymentId}:${failure.side}:${index}`}
-                  >
-                    <span className="font-medium">{chainName(failure.chainName)}</span>
-                    <span className="font-mono text-red-700">{failure.code}</span>
-                    <span className="text-muted-foreground">{failure.message}</span>
+                <div className="flex items-center justify-between gap-5 px-4 py-3">
+                  <div>
+                    <p className="text-xs font-semibold">RPC 快照净利润</p>
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      已计买卖 Gas、未包含费用、LayerZero 消息费与估算 send Gas
+                    </p>
                   </div>
-                ))}
+                  <div className="text-right">
+                    <p
+                      className={`font-mono text-lg font-semibold tabular-nums ${snapshot.summary.status === 'positive' ? 'text-emerald-700' : 'text-red-700'}`}
+                    >
+                      {formatSignedUsd(snapshot.summary.netProfitUsd)}
+                    </p>
+                    <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                      {formatSignedBps(snapshot.summary.netProfitBps)}
+                    </p>
+                  </div>
+                </div>
               </div>
-            </details>
+
+              <details className="mt-4 rounded-lg border bg-background">
+                <summary className="cursor-pointer px-3 py-2 text-xs font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/30">
+                  查看跨链费用明细
+                </summary>
+                <div className="grid grid-cols-4 gap-4 border-t p-3">
+                  <ResultValue label="OFT 请求数量" value={`${snapshot.bridge.requestedAmount} ${snapshot.symbol}`} />
+                  <ResultValue label="OFT 实际发送" value={`${snapshot.bridge.sentAmount} ${snapshot.symbol}`} />
+                  <ResultValue label="精度损耗" value={`${snapshot.bridge.dustAmount} ${snapshot.symbol}`} />
+                  <ResultValue label="OFT Token 费" value={`${snapshot.bridge.tokenFeeAmount} ${snapshot.symbol}`} />
+                  <ResultValue label="LayerZero 消息费" value={formatUsd(snapshot.bridge.nativeFeeUsd)} />
+                  <ResultValue label="源链 send Gas（估）" value={formatUsd(snapshot.bridge.sourceGasUsd)} />
+                  <ResultValue label="估算 Gas units" value={formatInteger(snapshot.bridge.sourceGasUnits)} />
+                  <ResultValue label="LZ Token fee raw" value={snapshot.bridge.lzTokenFeeRaw} />
+                </div>
+              </details>
+
+              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[10px] leading-5 text-amber-900">
+                <p className="font-semibold">快照边界</p>
+                <ul className="mt-1 list-disc ps-4">
+                  {snapshot.limitations.map((limitation) => (
+                    <li key={limitation}>{limitation}</li>
+                  ))}
+                </ul>
+              </div>
+            </>
           ) : null}
         </div>
 
         <div className="flex items-center justify-between gap-4 border-t bg-muted/25 px-5 py-3">
-          <p className="text-[10px] text-muted-foreground">仅查询报价，不签名、不授权、不会发送链上交易。</p>
+          <p className="text-[10px] text-muted-foreground">
+            仅执行只读报价和 RPC 调用，不签名、不授权、不会发送链上交易。
+          </p>
           <Button onClick={onClose} size="sm" type="button" variant="outline">
             关闭
           </Button>
         </div>
       </section>
+    </div>
+  );
+}
+
+function SnapshotStep({
+  detail,
+  label,
+  meta,
+  title,
+  value,
+}: {
+  detail: string;
+  label: string;
+  meta: string;
+  title: string;
+  value: string;
+}) {
+  return (
+    <div className="min-w-0 rounded-lg border bg-background p-3">
+      <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-1.5 text-xs font-semibold">{title}</p>
+      <p className="mt-2 font-mono text-[11px] font-semibold tabular-nums">{value}</p>
+      <p className="mt-1 font-mono text-[9px] text-muted-foreground tabular-nums">{detail}</p>
+      <p className="mt-2 truncate text-[9px] text-muted-foreground" title={meta}>
+        {meta}
+      </p>
     </div>
   );
 }
@@ -577,7 +583,7 @@ function DialogMetric({ label, tone, value }: { label: string; tone?: string; va
 
 function ResultValue({ label, tone, value }: { label: string; tone?: string; value: string }) {
   return (
-    <div>
+    <div className="px-3 py-2.5">
       <p className="text-[10px] text-muted-foreground">{label}</p>
       <p className={`mt-1 font-mono text-[11px] font-semibold tabular-nums ${tone ?? ''}`}>{value}</p>
     </div>
@@ -701,6 +707,11 @@ function formatSignedUsd(value: string): string {
 
 function formatSignedBps(value: number): string {
   return `${value >= 0 ? '+' : ''}${value} bps`;
+}
+
+function formatInteger(value: string): string {
+  const number = Number(value);
+  return Number.isSafeInteger(number) ? number.toLocaleString('en-US') : value;
 }
 
 function formatSignedPercent(value: number | null): string {

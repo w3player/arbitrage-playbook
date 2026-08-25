@@ -69,6 +69,21 @@ export interface OftContractProbe {
   quote: Record<string, unknown>;
 }
 
+export interface OftTransferQuote {
+  destinationEndpointId: number;
+  requestedAmountLD: bigint;
+  minAmountLD: bigint;
+  maxAmountLD: bigint;
+  amountSentLD: bigint;
+  amountReceivedLD: bigint;
+  feeDetails: Array<{ feeAmountLD: bigint; description: string }>;
+  nativeFee: bigint;
+  lzTokenFee: bigint;
+  gasPrice: bigint;
+  blockNumber: bigint;
+  quotedAt: Date;
+}
+
 export class OftContractClient {
   private readonly client: ReturnType<typeof createPublicClient>;
 
@@ -190,6 +205,68 @@ export class OftContractClient {
       adminAddress: addressFromBytes32(adminSlot),
       peers,
       quote,
+    };
+  }
+
+  async quoteTransfer(input: {
+    oftAddress: string;
+    destinationEndpointId: number;
+    recipient: string;
+    amountLD: bigint;
+    minAmountLD?: bigint;
+    extraOptions?: Hex;
+  }): Promise<OftTransferQuote> {
+    const address = getAddress(input.oftAddress);
+    const recipient = getAddress(input.recipient);
+    const sendParam = {
+      dstEid: input.destinationEndpointId,
+      to: pad(recipient, { size: 32 }),
+      amountLD: input.amountLD,
+      minAmountLD: input.minAmountLD ?? 0n,
+      extraOptions: input.extraOptions ?? ('0x' as Hex),
+      composeMsg: '0x' as Hex,
+      oftCmd: '0x' as Hex,
+    };
+    const [rpcChainId, oftQuote, messagingFee, gasPrice, blockNumber] =
+      await Promise.all([
+        this.client.getChainId(),
+        this.client.readContract({
+          address,
+          abi: OFT_ABI,
+          functionName: 'quoteOFT',
+          args: [sendParam],
+        }),
+        this.client.readContract({
+          address,
+          abi: OFT_ABI,
+          functionName: 'quoteSend',
+          args: [sendParam, false],
+        }),
+        this.client.getGasPrice(),
+        this.client.getBlockNumber(),
+      ]);
+    if (rpcChainId !== this.chain.chainId) {
+      throw new Error(
+        `RPC_CHAIN_ID_MISMATCH: expected ${this.chain.chainId}, received ${rpcChainId}`,
+      );
+    }
+
+    return {
+      destinationEndpointId: input.destinationEndpointId,
+      requestedAmountLD: input.amountLD,
+      minAmountLD: oftQuote[0].minAmountLD,
+      maxAmountLD: oftQuote[0].maxAmountLD,
+      amountSentLD: oftQuote[2].amountSentLD,
+      amountReceivedLD: oftQuote[2].amountReceivedLD,
+      feeDetails: oftQuote[1].map((fee) => ({
+        feeAmountLD: fee.feeAmountLD,
+        description: fee.description,
+      })),
+      nativeFee: messagingFee.nativeFee,
+      lzTokenFee: messagingFee.lzTokenFee,
+      gasPrice,
+      blockNumber,
+      quotedAt: new Date(),
     };
   }
 

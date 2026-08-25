@@ -1,0 +1,52 @@
+{
+  "chain": {
+    "id": 1,
+    "name": "Ethereum",
+    "httpRpcEnv": "POOL_MONITOR_HTTP_RPC_URL",
+    "wsRpcEnv": "POOL_MONITOR_WS_RPC_URL"
+  },
+  "statePath": "./data/state.json",
+  "flashLoanPremiumBps": 5,
+  "fixedCostBase": "8",
+  "minNetProfitBase": "10",
+  "logAllEvaluations": false,
+  "tokens": [
+    {
+      "symbol": "USDC",
+      "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "decimals": 6
+    },
+    {
+      "symbol": "WETH",
+      "address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "decimals": 18
+    }
+  ],
+  "pools": [
+    {
+      "id": "replace-with-v2-pool-a",
+      "dex": "DEX_A",
+      "address": "0x0000000000000000000000000000000000000001",
+      "token0": "USDC",
+      "token1": "WETH",
+      "feeBps": 30
+    },
+    {
+      "id": "replace-with-v2-pool-b",
+      "dex": "DEX_B",
+      "address": "0x0000000000000000000000000000000000000002",
+      "token0": "USDC",
+      "token1": "WETH",
+      "feeBps": 30
+    }
+  ],
+  "markets": [
+    {
+      "id": "USDC-WETH",
+      "baseToken": "USDC",
+      "quoteToken": "WETH",
+      "poolIds": ["replace-with-v2-pool-a", "replace-with-v2-pool-b"],
+      "amounts": ["1000", "5000", "10000", "25000", "50000"]
+    }
+  ]
+}
